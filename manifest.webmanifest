@@ -1,11 +1,11 @@
 {
-  "name": "PhysarumSimulation",
-  "short_name": "Physarum",
+  "name": "Biological Networks Inspiring Urban Connectivity",
+  "short_name": "PhysarumSim",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#242424",
   "theme_color": "#242424",
-  "description": "Physarum Simulation - works offline as a PWA.",
+  "description": "A slime mold (Physarum polycephalum) inspired simulation. Works offline and as a PWA.",
   "icons": [
     {
       "src": "index.icon.png",

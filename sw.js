@@ -2,12 +2,6 @@ const CACHE_NAME = 'physarum-cache-v1';
 const ASSETS = [
   './',
   './index.html',
-  './index.js',
-  './index.pck',
-  './index.wasm',
-  './index.icon.png',
-  './index.apple-touch-icon.png',
-  './index.png',
   './manifest.webmanifest'
 ];
 
