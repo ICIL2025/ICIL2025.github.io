@@ -1,242 +1,481 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-		<title>PhysarumSimulation</title>
-		<meta name="theme-color" content="#242424">
-		<link rel="manifest" href="manifest.webmanifest">
-		<style>
-html, body, #canvas {
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biological Networks Inspiring Urban Connectivity</title>
+    <style>
+        /* CSS styles */
+        body {
+            font-family: sans-serif;
+            display: flex;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background-color: #f0f0f0;
+            overflow: hidden;
+        }
 
-body {
-	color: white;
-	background-color: black;
-	overflow: hidden;
-	touch-action: none;
-}
+        #controlPanel {
+            width: 280px; /* Initial width */
+            min-width: 220px; /* Minimum width to prevent collapsing */
+            max-width: 600px; /* Maximum reasonable width */
+            padding: 15px;
+            background-color: #e0e0e0;
+            box-sizing: border-box;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0; /* Prevent the panel from shrinking on its own */
+        }
 
-#canvas {
-	display: block;
-}
+        /* NEW: Resizer Handle */
+        #resizer {
+            width: 8px;
+            cursor: col-resize;
+            background-color: #c0c0c0;
+            border-left: 1px solid #aaa;
+            border-right: 1px solid #aaa;
+            flex-shrink: 0;
+        }
+        #resizer:hover {
+            background-color: #a0a0a0;
+        }
 
-#canvas:focus {
-	outline: none;
-}
 
-#status, #status-splash, #status-progress {
-	position: absolute;
-	left: 0;
-	right: 0;
-}
+        #controlPanel h2 {
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            user-select: none; /* Prevent text selection while dragging */
+        }
 
-#status, #status-splash {
-	top: 0;
-	bottom: 0;
-}
+        .control-group {
+            margin-bottom: 12px;
+        }
 
-#status {
-	background-color: #242424;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: center;
-	visibility: hidden;
-}
+        .control-group label {
+            display: block;
+            font-size: .9em;
+            margin-bottom: 3px;
+            cursor: help;
+            user-select: none;
+        }
 
-#status-splash {
-	max-height: 100%;
-	max-width: 100%;
-	margin: auto;
-}
+        .control-group input[type=range],
+        .control-group input[type=number] {
+            width: calc(100% - 45px);
+            vertical-align: middle;
+        }
 
-#status-splash.show-image--false {
-	display: none;
-}
+        .control-group input[type=checkbox] {
+            vertical-align: middle;
+            margin-left: 5px
+        }
 
-#status-splash.fullsize--true {
-	height: 100%;
-	width: 100%;
-	object-fit: contain;
-}
+        input[type=file] {
+            display: none
+        }
 
-#status-splash.use-filter--false {
-	image-rendering: pixelated;
-}
+        .control-group span {
+            display: inline-block;
+            width: 40px;
+            text-align: right;
+            font-size: .85em;
+            vertical-align: middle;
+            margin-left: 5px
+        }
 
-#status-progress, #status-notice {
-	display: none;
-}
+        .control-group .checkbox-label {
+            display: inline-block;
+            margin-left: 5px;
+            font-size: .9em;
+            cursor: default
+        }
 
-#status-progress {
-	bottom: 10%;
-	width: 50%;
-	margin: 0 auto;
-}
+        #generationCounter {
+            font-size: .9em;
+            margin-top: 10px;
+            color: #333;
+            text-align: center;
+            font-weight: 700
+        }
 
-#status-notice {
-	background-color: #5b3943;
-	border-radius: 0.5rem;
-	border: 1px solid #9b3943;
-	color: #e0e0e0;
-	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
-	line-height: 1.3;
-	margin: 0 2rem;
-	overflow: hidden;
-	padding: 1rem;
-	text-align: center;
-	z-index: 1;
-}
+        #mainContent {
+            flex-grow: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
+            overflow: hidden;
+            min-width: 300px; /* Prevent it from becoming too small */
+        }
 
-#pwa-notice {
-	position: fixed;
-	bottom: 0;
-	left: 0;
-	right: 0;
-	background: #242424;
-	color: #fff;
-	text-align: center;
-	padding: 0.5em;
-	font-size: 0.9em;
-	z-index: 1000;
-}
-		</style>
-		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
-<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+        #mainContent h1 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            font-size: 1.5em;
+            text-align: center;
+            color: #333
+        }
 
-	</head>
-	<body>
-		<canvas id="canvas">
-			Your browser does not support the canvas tag.
-		</canvas>
+        #mainContent p {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: .9em;
+            color: #555;
+            text-align: center;
+            max-width: 800px
+        }
 
-		<noscript>
-			Your browser does not support JavaScript.
-		</noscript>
+        canvas {
+            border: 1px solid #000;
+            background-color: #222;
+            cursor: crosshair;
+            max-width: 100%;
+            max-height: calc(100vh - 150px);
+            display: block;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, .2)
+        }
 
-		<div id="status">
-			<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
-			<progress id="status-progress"></progress>
-			<div id="status-notice"></div>
-		</div>
-		<script src="index.js"></script>
-		<script>
-		// Register service worker for PWA/offline support
-		if ('serviceWorker' in navigator) {
-			window.addEventListener('load', function() {
-				navigator.serviceWorker.register('sw.js').catch(function(e){console.log('SW registration failed:',e)});
-			});
-		}
-		</script>
-		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":1348192,"index.wasm":52126319},"focusCanvas":true,"gdextensionLibs":[]};
-const GODOT_THREADS_ENABLED = false;
-const engine = new Engine(GODOT_CONFIG);
+        button {
+            padding: 8px 15px;
+            font-size: .95em;
+            cursor: pointer;
+            margin-top: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #999;
+            border-radius: 3px;
+            transition: background-color .2s ease
+        }
 
-(function () {
-	const statusOverlay = document.getElementById('status');
-	const statusProgress = document.getElementById('status-progress');
-	const statusNotice = document.getElementById('status-notice');
+        button:disabled {
+            cursor: not-allowed;
+            opacity: .6;
+            background-color: #ddd !important;
+            color: #888 !important
+        }
 
-	let initializing = true;
-	let statusMode = '';
+        #runButton { background-color: #90ee90; color: #003300; border-color: #5db45d }
+        #pauseButton { background-color: #fffacd; color: #6b6b00; border-color: #b4b476 }
+        #resetSimButton { background-color: #add8e6; color: #000055; border-color: #6495ed }
+        #clearAllButton { background-color: #ffcccb; color: #550000; border-color: #f08080 }
+        #saveButton { background-color: #d8bfd8; color: #3b003b; border-color: #9370db }
+        #importButton { background-color: #b0e0e6; color: #003f4d; border-color: #4682b4 }
+        #optimizeButton { background-color: #faebd7; color: #8b4513; border-color: #d2b48c }
+        #importBgButton { background-color: #e6e6fa; color: #191970; border-color: #9fa8da }
+        button:hover:not(:disabled) { filter: brightness(1.1) }
+        #controlPanel .separator { border-top: 1px solid #ccc; margin: 15px 0 }
+        .button-group { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 10px }
+        .button-group button { margin-top: 0 }
+        .background-controls { margin-top: 10px; padding-top: 10px; border-top: 1px solid #ccc }
+    </style>
+</head>
+<body>
 
-	function setStatusMode(mode) {
-		if (statusMode === mode || !initializing) {
-			return;
-		}
-		if (mode === 'hidden') {
-			statusOverlay.remove();
-			initializing = false;
-			return;
-		}
-		statusOverlay.style.visibility = 'visible';
-		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
-		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
-		statusMode = mode;
-	}
+    <div id="controlPanel">
+        <h2>Controls</h2>
+        <div class="control-group"> <label for="numAgents" title="Number of agents exploring (e.g., 500-5000). More agents explore faster but use more resources. Requires restart.">Agents:</label> <input type="range" id="numAgents" min="100" max="10000" step="100" value="2500"> <span id="numAgentsValue">2500</span> </div>
+        <div class="control-group"> <label for="agentSpeed" title="How fast agents move per step (e.g., 0.5-2.0).">Speed:</label> <input type="range" id="agentSpeed" min="0.1" max="3" step="0.1" value="1.1"> <span id="agentSpeedValue">1.1</span> </div>
+        <div class="control-group"> <label for="sensorDist" title="How far ahead agents sense (e.g., 5-30 pixels).">Sensor Dist:</label> <input type="range" id="sensorDist" min="1" max="50" step="1" value="12"> <span id="sensorDistValue">12</span> </div>
+        <div class="control-group"> <label for="sensorAngle" title="Angle of side sensors relative to forward (e.g., 15-60 degrees). Smaller angles focus more forward.">Sensor Angle (°):</label> <input type="range" id="sensorAngle" min="5" max="90" step="5" value="36"> <span id="sensorAngleValue">36</span> </div>
+        <div class="control-group"> <label for="turnAngle" title="How sharply agents turn towards stimulus (e.g., 10-70 degrees).">Turn Angle (°):</label> <input type="range" id="turnAngle" min="5" max="90" step="5" value="45"> <span id="turnAngleValue">45</span> </div>
+        <div class="separator"></div>
+        <div class="control-group"> <label for="trailDeposit" title="Amount of trail deposited per agent step (e.g., 1-15). Higher values make trails stronger faster.">Trail Deposit:</label> <input type="range" id="trailDeposit" min="0.5" max="20" step="0.5" value="6"> <span id="trailDepositValue">6</span> </div>
+        <div class="control-group"> <label for="decayFactor" title="Trail persistence (0.8-0.999). Higher values mean slower decay (trails last longer). 0.99 is very slow decay, 0.9 is fast.">Decay Factor:</label> <input type="range" id="decayFactor" min="0.80" max="0.999" step="0.005" value="0.97"> <span id="decayFactorValue">0.97</span> </div>
+        <div class="control-group"> <label for="diffusionFactor" title="How much trails spread/blur each step (0.0-1.0). 0 = no blur, 0.5 = moderate blur. Helps smooth paths.">Diffusion Factor:</label> <input type="range" id="diffusionFactor" min="0.0" max="1.0" step="0.05" value="0.4"> <span id="diffusionFactorValue">0.4</span> </div>
+        <div class="separator"></div>
+        <div class="control-group"> <label for="foodStrength" title="How strongly agents are attracted to food relative to trails (e.g., 50-500). Too high can trap agents.">Food Strength:</label> <input type="range" id="foodStrength" min="0" max="500" step="10" value="100"> <span id="foodStrengthValue">100</span> </div>
+        <div class="control-group"> <label for="foodAttractionRadius" title="How far agents can 'smell' food (e.g., 20-100 pixels).">Food Radius:</label> <input type="range" id="foodAttractionRadius" min="5" max="150" step="5" value="50"> <span id="foodAttractionRadiusValue">50</span> </div>
+        <div class="separator"></div>
+        <div class="control-group"> <input type="checkbox" id="drawAgents" title="Show individual agents (white dots). Can significantly impact performance with many agents."> <label for="drawAgents" class="checkbox-label">Draw Agents</label> </div>
 
-	function setStatusNotice(text) {
-		while (statusNotice.lastChild) {
-			statusNotice.removeChild(statusNotice.lastChild);
-		}
-		const lines = text.split('\n');
-		lines.forEach((line) => {
-			statusNotice.appendChild(document.createTextNode(line));
-			statusNotice.appendChild(document.createElement('br'));
-		});
-	}
+        <div class="background-controls">
+            <button id="importBgButton">Import Background</button>
+            <input type="file" id="importBgFile" accept="image/*">
+            <div class="control-group" style="margin-top: 8px;">
+                 <input type="checkbox" id="showBackground" title="Toggle visibility of the imported background image.">
+                 <label for="showBackground" class="checkbox-label">Show Background</label>
+            </div>
+            <div class="control-group" style="margin-top: 5px;">
+                 <label for="bgOpacitySlider" title="Adjust transparency of the background image (0=invisible, 1=opaque).">BG Opacity:</label>
+                 <input type="range" id="bgOpacitySlider" min="0.0" max="1.0" step="0.05" value="1.0">
+                 <span id="bgOpacityValue">1.0</span>
+            </div>
+        </div>
 
-	function displayFailureNotice(err) {
-		console.error(err);
-		if (err instanceof Error) {
-			setStatusNotice(err.message);
-		} else if (typeof err === 'string') {
-			setStatusNotice(err);
-		} else {
-			setStatusNotice('An unknown error occurred.');
-		}
-		setStatusMode('notice');
-		initializing = false;
-	}
+        <div id="generationCounter">Generation: 0</div>
+        <div class="button-group"> <button id="runButton">Run</button> <button id="pauseButton" disabled>Pause</button> </div>
+        <div class="button-group"> <button id="resetSimButton">Reset Sim</button> <button id="clearAllButton">Clear All</button> </div>
+        <div class="button-group"> <button id="saveButton">Save Simulation</button> <button id="importButton">Import State</button> <input type="file" id="importFile" accept=".json"> </div>
+        <div class="button-group" style="grid-template-columns: 1fr;"> <button id="optimizeButton">Optimize Path</button> </div>
+    </div>
 
-	const missing = Engine.getMissingFeatures({
-		threads: GODOT_THREADS_ENABLED,
-	});
+    <div id="resizer"></div> <!-- NEW: Resizer Handle -->
 
-	if (missing.length !== 0) {
-		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
-			let serviceWorkerRegistrationPromise;
-			try {
-				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
-			} catch (err) {
-				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
-			}
-			// There's a chance that installing the service worker would fix the issue
-			Promise.race([
-				serviceWorkerRegistrationPromise.then((registration) => {
-					if (registration != null) {
-						return Promise.reject(new Error('Service worker already exists.'));
-					}
-					return registration;
-				}).then(() => engine.installServiceWorker()),
-				// For some reason, `getRegistration()` can stall
-				new Promise((resolve) => {
-					setTimeout(() => resolve(), 2000);
-				}),
-			]).then(() => {
-				// Reload if there was no error.
-				window.location.reload();
-			}).catch((err) => {
-				console.error('Error while registering service worker:', err);
-			});
-		} else {
-			// Display the message as usual
-			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
-			displayFailureNotice(missingMsg + missing.join('\n'));
-		}
-	} else {
-		setStatusMode('progress');
-		engine.startGame({
-			'onProgress': function (current, total) {
-				if (current > 0 && total > 0) {
-					statusProgress.value = current;
-					statusProgress.max = total;
-				} else {
-					statusProgress.removeAttribute('value');
-					statusProgress.removeAttribute('max');
-				}
-			},
-		}).then(() => {
-			setStatusMode('hidden');
-		}, displayFailureNotice);
-	}
-}());
-		</script>
-	</body>
+    <div id="mainContent">
+        <h1>BIOLOGICAL NETWORKS INSPIRING URBAN CONNECTIVITY</h1>
+        <p>A slime mold (*Physarum polycephalum*) inspired simulation. Adjust parameters, click canvas to add food sources (yellow dots), then press "Run". Save/Import the simulation state or optimize the path. You can also import a background image.</p>
+        <canvas id="simulationCanvas"></canvas>
+    </div>
+
+
+    <script>
+        // --- Canvas and Context ---
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- DOM Elements ---
+        const controlPanel = document.getElementById('controlPanel');
+        const resizer = document.getElementById('resizer');
+        const controls = { numAgents: document.getElementById('numAgents'), agentSpeed: document.getElementById('agentSpeed'), sensorDist: document.getElementById('sensorDist'), sensorAngle: document.getElementById('sensorAngle'), turnAngle: document.getElementById('turnAngle'), trailDeposit: document.getElementById('trailDeposit'), decayFactor: document.getElementById('decayFactor'), diffusionFactor: document.getElementById('diffusionFactor'), foodStrength: document.getElementById('foodStrength'), foodAttractionRadius: document.getElementById('foodAttractionRadius'), drawAgents: document.getElementById('drawAgents'), numAgentsValue: document.getElementById('numAgentsValue'), agentSpeedValue: document.getElementById('agentSpeedValue'), sensorDistValue: document.getElementById('sensorDistValue'), sensorAngleValue: document.getElementById('sensorAngleValue'), turnAngleValue: document.getElementById('turnAngleValue'), trailDepositValue: document.getElementById('trailDepositValue'), decayFactorValue: document.getElementById('decayFactorValue'), diffusionFactorValue: document.getElementById('diffusionFactorValue'), foodStrengthValue: document.getElementById('foodStrengthValue'), foodAttractionRadiusValue: document.getElementById('foodAttractionRadiusValue'), showBackground: document.getElementById('showBackground'), importBgButton: document.getElementById('importBgButton'), importBgFile: document.getElementById('importBgFile'), bgOpacitySlider: document.getElementById('bgOpacitySlider'), bgOpacityValue: document.getElementById('bgOpacityValue') };
+        const runButton = document.getElementById('runButton');
+        const pauseButton = document.getElementById('pauseButton');
+        const resetSimButton = document.getElementById('resetSimButton');
+        const clearAllButton = document.getElementById('clearAllButton');
+        const saveButton = document.getElementById('saveButton');
+        const importButton = document.getElementById('importButton');
+        const importFile = document.getElementById('importFile');
+        const optimizeButton = document.getElementById('optimizeButton');
+        const generationCounter = document.getElementById('generationCounter');
+
+        // --- Simulation Parameters ---
+        let PARAMS = {};
+
+        // --- Simulation State ---
+        let canvasWidth = 800; let canvasHeight = 600;
+        let agents = []; let foodSources = []; let trailMap; let tempTrailMap;
+        let gridWidth, gridHeight;
+        const trailResolution = 4;
+        let animationFrameId = null; let simulationRunning = false; let simulationPaused = false; let generationCount = 0;
+        let backgroundImage = null; let showBackground = false; let backgroundOpacity = 1.0;
+        let isOptimizedViewActive = false; let lastOptimizedPathPoints = null;
+
+        // --- NEW: Resizer Logic ---
+        function resize(e) {
+            const newWidth = e.clientX - controlPanel.getBoundingClientRect().left;
+            controlPanel.style.width = `${newWidth}px`;
+        }
+
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // Prevent text selection
+            document.addEventListener('mousemove', resize);
+            document.addEventListener('mouseup', () => {
+                document.removeEventListener('mousemove', resize);
+                // Optionally, resize canvas here if needed after panel resize
+                // For this app, canvas size is fixed, so no action needed.
+            });
+        });
+
+
+        // --- Helper Functions ---
+        function degreesToRadians(degrees) { return degrees * Math.PI / 180; }
+        function radiansToDegrees(radians) { return radians * 180 / Math.PI; }
+        function distanceSq(p1, p2) { const dx = p1.x - p2.x; const dy = p1.y - p2.y; return dx * dx + dy * dy; }
+
+        // --- Update Parameters from Controls ---
+        function updateParams() { PARAMS = { numAgents: parseInt(controls.numAgents.value), agentSpeed: parseFloat(controls.agentSpeed.value), sensorDist: parseFloat(controls.sensorDist.value), sensorAngleRad: degreesToRadians(parseFloat(controls.sensorAngle.value)), turnAngleRad: degreesToRadians(parseFloat(controls.turnAngle.value)), trailDeposit: parseFloat(controls.trailDeposit.value), decayFactor: parseFloat(controls.decayFactor.value), diffusionFactor: parseFloat(controls.diffusionFactor.value), foodStrength: parseFloat(controls.foodStrength.value), foodAttractionRadius: parseFloat(controls.foodAttractionRadius.value), drawAgents: controls.drawAgents.checked }; controls.numAgentsValue.textContent = PARAMS.numAgents; controls.agentSpeedValue.textContent = PARAMS.agentSpeed.toFixed(1); controls.sensorDistValue.textContent = PARAMS.sensorDist.toFixed(0); controls.sensorAngleValue.textContent = controls.sensorAngle.value; controls.turnAngleValue.textContent = controls.turnAngle.value; controls.trailDepositValue.textContent = PARAMS.trailDeposit.toFixed(1); controls.decayFactorValue.textContent = PARAMS.decayFactor.toFixed(3); controls.diffusionFactorValue.textContent = PARAMS.diffusionFactor.toFixed(2); controls.foodStrengthValue.textContent = PARAMS.foodStrength.toFixed(0); controls.foodAttractionRadiusValue.textContent = PARAMS.foodAttractionRadius.toFixed(0); showBackground = controls.showBackground.checked; backgroundOpacity = parseFloat(controls.bgOpacitySlider.value); controls.bgOpacityValue.textContent = backgroundOpacity.toFixed(2); }
+        function updateControlsFromParams() { controls.numAgents.value = PARAMS.numAgents; controls.agentSpeed.value = PARAMS.agentSpeed; controls.sensorDist.value = PARAMS.sensorDist; controls.sensorAngle.value = radiansToDegrees(PARAMS.sensorAngleRad).toFixed(0); controls.turnAngle.value = radiansToDegrees(PARAMS.turnAngleRad).toFixed(0); controls.trailDeposit.value = PARAMS.trailDeposit; controls.decayFactor.value = PARAMS.decayFactor; controls.diffusionFactor.value = PARAMS.diffusionFactor; controls.foodStrength.value = PARAMS.foodStrength; controls.foodAttractionRadius.value = PARAMS.foodAttractionRadius; controls.drawAgents.checked = PARAMS.drawAgents; updateParams(); }
+
+         // --- Button State Management ---
+         function updateButtonStates() { runButton.disabled = simulationRunning; pauseButton.disabled = !simulationRunning; }
+
+        // --- Initialization and Reset ---
+        function setupCanvas() {
+            // Get the available space in the main content area
+            const mainContentRect = document.getElementById('mainContent').getBoundingClientRect();
+            // Let's try to fit the canvas while maintaining aspect ratio
+            const availableWidth = mainContentRect.width - 40; // 20px padding on each side
+            const availableHeight = window.innerHeight - 150; // Approx height of header and footer elements
+
+            const aspectRatio = 800 / 600; // Original aspect ratio
+            
+            let newWidth = availableWidth;
+            let newHeight = newWidth / aspectRatio;
+
+            if (newHeight > availableHeight) {
+                newHeight = availableHeight;
+                newWidth = newHeight * aspectRatio;
+            }
+            
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            canvasWidth = newWidth;
+            canvasHeight = newHeight;
+
+            drawStaticElements(); 
+        }
+
+        // Resets only data/flags, does NOT redraw
+        function resetSimulationDataState(clearFood = false) { if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; } simulationRunning = false; simulationPaused = false; isOptimizedViewActive = false; lastOptimizedPathPoints = null; agents = []; generationCount = 0; generationCounter.textContent = `Generation: ${generationCount}`; gridWidth = Math.ceil(canvasWidth / trailResolution); gridHeight = Math.ceil(canvasHeight / trailResolution); trailMap = new Array(gridWidth).fill(0).map(() => new Array(gridHeight).fill(0)); tempTrailMap = new Array(gridWidth).fill(0).map(() => new Array(gridHeight).fill(0)); if (clearFood) { foodSources = []; } }
+        // Calls data reset then draws static elements
+        function resetSimulationState(clearFood = false) { console.log(`Resetting simulation state. Clear food: ${clearFood}`); resetSimulationDataState(clearFood); updateButtonStates(); drawStaticElements(); }
+        function handleRunClick() { if (simulationPaused) { console.log("Resuming simulation."); isOptimizedViewActive = false; lastOptimizedPathPoints = null; simulationRunning = true; simulationPaused = false; updateButtonStates(); animate(); } else if (!simulationRunning) { console.log("Starting new simulation."); updateParams(); resetSimulationDataState(false); isOptimizedViewActive = false; lastOptimizedPathPoints = null; simulationRunning = true; simulationPaused = false; spawnAgents(PARAMS.numAgents); updateButtonStates(); animate(); } }
+        function handlePauseClick() { if (simulationRunning) { console.log("Pausing simulation."); simulationRunning = false; simulationPaused = true; cancelAnimationFrame(animationFrameId); animationFrameId = null; updateButtonStates(); } }
+        function handleResetClick() { console.log("Resetting simulation (keeping food)."); resetSimulationState(false); }
+        function handleClearAllClick() { console.log("Clearing all food and resetting simulation."); resetSimulationState(true); }
+        function spawnAgents(count) { agents = []; for (let i = 0; i < count; i++) { agents.push({ x: Math.random() * canvasWidth, y: Math.random() * canvasHeight, angle: Math.random() * 2 * Math.PI }); } console.log(`Spawned ${agents.length} agents.`); }
+
+        // --- Save State Logic ---
+        function handleSaveClick() { console.log("Saving simulation state..."); if (simulationRunning) { handlePauseClick(); } try { const saveData = { timestamp: new Date().toISOString(), foodSources: foodSources, trailMap: trailMap, params: PARAMS, generation: generationCount }; const jsonString = JSON.stringify(saveData, null, 2); const blob = new Blob([jsonString], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-'); a.download = `slime_simulation_${dateStr}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); console.log("State saved successfully."); } catch (error) { console.error("Error saving state:", error); alert("Error saving simulation state. See console for details."); } }
+
+        // --- Import State Logic ---
+        function handleImportFileSelect(event) { if (event.target.files.length === 0) { console.log("No file selected."); return; } const file = event.target.files[0]; console.log(`Attempting to import file: ${file.name}`); const reader = new FileReader(); reader.onload = (e) => { try { const fileContent = e.target.result; const loadedData = JSON.parse(fileContent); if (!loadedData || typeof loadedData !== 'object') { throw new Error("Invalid JSON structure: Root is not an object."); } if (!Array.isArray(loadedData.foodSources)) { throw new Error("Invalid JSON structure: 'foodSources' is missing or not an array."); } if (!Array.isArray(loadedData.trailMap) || !Array.isArray(loadedData.trailMap[0])) { throw new Error("Invalid JSON structure: 'trailMap' is missing or not a 2D array."); } console.log("JSON parsed successfully. Restoring state..."); resetSimulationDataState(true); foodSources = loadedData.foodSources; trailMap = loadedData.trailMap; generationCount = loadedData.generation || 0; PARAMS = loadedData.params || PARAMS; if (trailMap.length !== gridWidth || (trailMap[0] && trailMap[0].length !== gridHeight)) { console.warn("Warning: Imported trailMap dimensions mismatch. Resetting trailMap."); trailMap = new Array(gridWidth).fill(0).map(() => new Array(gridHeight).fill(0)); } updateControlsFromParams(); generationCounter.textContent = `Generation: ${generationCount}`; console.log("State restored from file."); drawStaticElements(); } catch (error) { console.error("Error processing imported file:", error); alert(`Error importing file: ${error.message}\n\nEnsure the file is a valid JSON saved from this simulation.`); } finally { event.target.value = null; } }; reader.onerror = (e) => { console.error("Error reading file:", e); alert("Error reading the selected file."); event.target.value = null; }; reader.readAsText(file); }
+
+       // --- Import Background Image Logic ---
+       function handleImportBgFileSelect(event) { if (event.target.files.length === 0) { console.log("No background image file selected."); return; } const file = event.target.files[0]; console.log(`Attempting to import background image: ${file.name}`); const reader = new FileReader(); reader.onload = (e) => { const img = new Image(); img.onload = () => { console.log("Background image loaded successfully."); backgroundImage = img; controls.showBackground.checked = true; showBackground = true; updateParams(); drawStaticElements(); }; img.onerror = () => { console.error("Error loading image data."); alert("Could not load the selected image file."); backgroundImage = null; controls.showBackground.checked = false; showBackground = false; updateParams(); drawStaticElements(); }; img.src = e.target.result; }; reader.onerror = (e) => { console.error("Error reading background file:", e); alert("Error reading the selected background file."); }; reader.readAsDataURL(file); event.target.value = null; }
+
+       // --- Toggle Background Visibility Logic ---
+       function handleShowBackgroundToggle() { showBackground = controls.showBackground.checked; console.log(`Show background toggled: ${showBackground}`); drawStaticElements(); }
+
+       // --- Optimize Path Logic (Single Curve) ---
+        function handleOptimizeClick() {
+            if (simulationRunning) { handlePauseClick(); }
+            if (foodSources.length < 2) {
+                alert("Need at least two food sources to optimize path.");
+                return;
+            }
+            lastOptimizedPathPoints = getFoodSourceOrder();
+            resetSimulationDataState(false);
+            isOptimizedViewActive = true;
+            drawOptimizedSingleCurve(lastOptimizedPathPoints);
+            updateButtonStates();
+            runButton.disabled = false;
+            pauseButton.disabled = true;
+        }
+
+        // Get food source order (nearest neighbor heuristic)
+        function getFoodSourceOrder() {
+            if (foodSources.length === 0) return [];
+            if (foodSources.length === 1) return [foodSources[0]];
+            const remaining = new Set(foodSources.map((_, index) => index));
+            const ordered = [];
+            let currentIndex = 0;
+            ordered.push(foodSources[currentIndex]);
+            remaining.delete(currentIndex);
+            while (remaining.size > 0) {
+                let nearestIndex = -1;
+                let minDistSq = Infinity;
+                const currentPoint = foodSources[currentIndex];
+                for (const index of remaining) {
+                    const distSq = distanceSq(currentPoint, foodSources[index]);
+                    if (distSq < minDistSq) {
+                        minDistSq = distSq;
+                        nearestIndex = index;
+                    }
+                }
+                if (nearestIndex === -1) break;
+                currentIndex = nearestIndex;
+                ordered.push(foodSources[currentIndex]);
+                remaining.delete(currentIndex);
+            }
+            return ordered;
+        }
+
+        // Draw the complete optimized view as a single curve
+        function drawOptimizedSingleCurve(orderedPoints) {
+            if (!orderedPoints || orderedPoints.length < 2) {
+                 clearAndDrawBackground();
+                 drawFoodSources();
+                 return;
+            }
+            clearAndDrawBackground();
+            drawFoodSources();
+            ctx.strokeStyle = 'lime';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.9;
+            ctx.beginPath();
+            ctx.moveTo(orderedPoints[0].x, orderedPoints[0].y);
+            if (orderedPoints.length === 2) {
+                ctx.lineTo(orderedPoints[1].x, orderedPoints[1].y);
+            } else {
+                for (let i = 1; i < orderedPoints.length - 1; i++) {
+                    const xc = (orderedPoints[i].x + orderedPoints[i + 1].x) / 2;
+                    const yc = (orderedPoints[i].y + orderedPoints[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(orderedPoints[i].x, orderedPoints[i].y, xc, yc);
+                }
+                 ctx.quadraticCurveTo(
+                     orderedPoints[orderedPoints.length - 2].x,
+                     orderedPoints[orderedPoints.length - 2].y,
+                     orderedPoints[orderedPoints.length - 1].x,
+                     orderedPoints[orderedPoints.length - 1].y
+                 );
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+        }
+
+        // --- Agent Logic ---
+        function updateAgents() { for (let i = agents.length - 1; i >= 0; i--) { const agent = agents[i]; const senseData = sense(agent); steer(agent, senseData); move(agent); depositTrail(agent); } }
+        function sense(agent) { const angle = agent.angle; const FL_angle = angle + PARAMS.sensorAngleRad; const F_angle = angle; const FR_angle = angle - PARAMS.sensorAngleRad; const FL_x = agent.x + Math.cos(FL_angle) * PARAMS.sensorDist; const FL_y = agent.y + Math.sin(FL_angle) * PARAMS.sensorDist; const F_x = agent.x + Math.cos(F_angle) * PARAMS.sensorDist; const F_y = agent.y + Math.sin(F_angle) * PARAMS.sensorDist; const FR_x = agent.x + Math.cos(FR_angle) * PARAMS.sensorDist; const FR_y = agent.y + Math.sin(FR_angle) * PARAMS.sensorDist; const senseFL = getTrailIntensity(FL_x, FL_y) + getFoodAttraction(FL_x, FL_y); const senseF = getTrailIntensity(F_x, F_y) + getFoodAttraction(F_x, F_y); const senseFR = getTrailIntensity(FR_x, FR_y) + getFoodAttraction(FR_x, FR_y); return { FL: senseFL, F: senseF, FR: senseFR }; }
+        function steer(agent, senseData) { const { FL, F, FR } = senseData; const turnRad = PARAMS.turnAngleRad; if (F > FL && F > FR) { agent.angle += (Math.random() - 0.5) * (turnRad * 0.05); } else if (F < FL && F < FR) { agent.angle += (Math.random() < 0.5 ? 1 : -1) * turnRad; } else if (FL > FR) { agent.angle += turnRad; } else if (FR > FL) { agent.angle -= turnRad; } }
+        function move(agent) { const speed = PARAMS.agentSpeed; agent.x += Math.cos(agent.angle) * speed; agent.y += Math.sin(agent.angle) * speed; if (agent.x < 0) agent.x = (agent.x % canvasWidth + canvasWidth) % canvasWidth; else if (agent.x >= canvasWidth) agent.x %= canvasWidth; if (agent.y < 0) agent.y = (agent.y % canvasHeight + canvasHeight) % canvasHeight; else if (agent.y >= canvasHeight) agent.y %= canvasHeight;}
+
+        // --- Trail Map Logic ---
+        function depositTrail(agent) { const gridX = Math.floor(agent.x / trailResolution); const gridY = Math.floor(agent.y / trailResolution); if (gridX >= 0 && gridX < gridWidth && gridY >= 0 && gridY < gridHeight) { trailMap[gridX][gridY] = Math.min(1000, trailMap[gridX][gridY] + PARAMS.trailDeposit); } }
+        function getTrailIntensity(x, y) { const gridX = Math.floor(x / trailResolution); const gridY = Math.floor(y / trailResolution); if (gridX >= 0 && gridX < gridWidth && gridY >= 0 && gridY < gridHeight) { return trailMap[gridX][gridY]; } return 0; }
+        function getFoodAttraction(x, y) { let attraction = 0; const radius = PARAMS.foodAttractionRadius; const strength = PARAMS.foodStrength; const radiusSq = radius * radius; foodSources.forEach(food => { const dx = food.x - x; const dy = food.y - y; const distSq = dx * dx + dy * dy; if (distSq < radiusSq && distSq > 1) { attraction += strength * (radiusSq - distSq) / radiusSq; } else if (distSq <= 1) { attraction = strength * 10; } }); return attraction; }
+        function updateTrailMap() { const decay = PARAMS.decayFactor; const diffusion = PARAMS.diffusionFactor; if (diffusion > 0) { for (let x=0; x<gridWidth; x++) { for (let y=0; y<gridHeight; y++) { tempTrailMap[x][y] = trailMap[x][y]; } } for (let x = 1; x < gridWidth - 1; x++) { for (let y = 1; y < gridHeight - 1; y++) { let sum = 0; sum += tempTrailMap[x-1][y-1]; sum += tempTrailMap[x][y-1]; sum += tempTrailMap[x+1][y-1]; sum += tempTrailMap[x-1][y]; sum += tempTrailMap[x+1][y]; sum += tempTrailMap[x-1][y+1]; sum += tempTrailMap[x][y+1]; sum += tempTrailMap[x+1][y+1]; const blurredValue = sum / 8; trailMap[x][y] = tempTrailMap[x][y] * (1 - diffusion) + blurredValue * diffusion; } } } for (let x = 0; x < gridWidth; x++) { for (let y = 0; y < gridHeight; y++) { trailMap[x][y] = Math.max(0, trailMap[x][y] * decay); } } }
+
+        // --- Drawing Logic ---
+        function clearAndDrawBackground() { ctx.clearRect(0, 0, canvasWidth, canvasHeight); if (showBackground && backgroundImage) { ctx.globalAlpha = backgroundOpacity; ctx.drawImage(backgroundImage, 0, 0, canvasWidth, canvasHeight); ctx.globalAlpha = 1.0; } else { ctx.fillStyle = '#222'; ctx.fillRect(0, 0, canvasWidth, canvasHeight); } }
+        // MODIFIED drawStaticElements to handle optimized view state
+        function drawStaticElements() {
+            if (isOptimizedViewActive) {
+                drawOptimizedSingleCurve(lastOptimizedPathPoints);
+            } else {
+                clearAndDrawBackground();
+                drawFoodSources();
+            }
+        }
+        function drawFoodSources() { ctx.fillStyle = 'yellow'; ctx.strokeStyle = 'orange'; ctx.lineWidth = 1; foodSources.forEach(food => { ctx.beginPath(); ctx.arc(food.x, food.y, 8, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); }); }
+        // MODIFIED drawSimulation to prevent drawing if optimized view is active
+        function drawSimulation() { if (isOptimizedViewActive) { return; } clearAndDrawBackground(); for (let gridX = 0; gridX < gridWidth; gridX++) { for (let gridY = 0; gridY < gridHeight; gridY++) { const trailValue = trailMap[gridX][gridY]; if (trailValue > 0.1) { const intensity = Math.min(1, trailValue / 150); const alpha = Math.min(1, intensity * 1.5); ctx.fillStyle = `rgba(0, 220, 80, ${alpha * 0.6})`; ctx.fillRect(gridX * trailResolution, gridY * trailResolution, trailResolution, trailResolution); } } } if (PARAMS.drawAgents) { ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'; agents.forEach(agent => { ctx.fillRect(agent.x - 0.5, agent.y - 0.5, 1, 1); }); } drawFoodSources(); }
+
+        // --- User Interaction ---
+        function addFoodSource(x, y) { if (simulationRunning || simulationPaused || isOptimizedViewActive) { console.log("Please Reset or Clear the simulation before adding more food."); return; } const minDistSq = 20 * 20; for (const food of foodSources) { const dx = food.x - x; const dy = food.y - y; if (dx*dx + dy*dy < minDistSq) return; } foodSources.push({ x: x, y: y }); console.log(`Added food source #${foodSources.length} at (${x.toFixed(1)}, ${y.toFixed(1)})`); drawStaticElements(); }
+        canvas.addEventListener('click', (event) => { const rect = canvas.getBoundingClientRect(); const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height; const x = (event.clientX - rect.left) * scaleX; const y = (event.clientY - rect.top) * scaleY; if (x >= 0 && x <= canvasWidth && y >= 0 && y <= canvasHeight) { addFoodSource(x, y); } });
+
+        // --- Control Panel Event Listeners ---
+        Object.keys(controls).forEach(key => { const element = controls[key]; if (element && (element.tagName === 'INPUT' || element.tagName === 'SELECT')) { element.addEventListener('input', updateParams); } });
+        runButton.addEventListener('click', handleRunClick);
+        pauseButton.addEventListener('click', handlePauseClick);
+        resetSimButton.addEventListener('click', handleResetClick);
+        clearAllButton.addEventListener('click', handleClearAllClick);
+        saveButton.addEventListener('click', handleSaveClick);
+        importButton.addEventListener('click', () => importFile.click());
+        importFile.addEventListener('change', handleImportFileSelect);
+        optimizeButton.addEventListener('click', handleOptimizeClick);
+        controls.importBgButton.addEventListener('click', () => controls.importBgFile.click());
+        controls.importBgFile.addEventListener('change', handleImportBgFileSelect);
+        controls.showBackground.addEventListener('change', handleShowBackgroundToggle);
+        controls.bgOpacitySlider.addEventListener('input', () => { updateParams(); drawStaticElements(); });
+
+        // --- Animation Loop ---
+        function animate() { if (!simulationRunning) { animationFrameId = null; return; } generationCount++; generationCounter.textContent = `Generation: ${generationCount}`; updateAgents(); updateTrailMap(); drawSimulation(); animationFrameId = requestAnimationFrame(animate); }
+        
+        // --- Resize listener ---
+        window.addEventListener('resize', setupCanvas);
+
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', () => {
+            updateParams(); 
+            setupCanvas();
+            resetSimulationState(true);
+            console.log("Simulation ready. Add food sources, import state/background, or press Run.");
+        });
+
+        // Service Worker registration
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+              .then(reg => console.log('Service Worker registered:', reg.scope))
+              .catch(err => console.error('Service Worker registration failed:', err));
+          });
+        }
+    </script>
+</body>
 </html>
-
