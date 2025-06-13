@@ -1,0 +1,489 @@
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    display: flex;
+    flex-direction: row;
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    background-color: #f0f0f0;
+    overflow: hidden;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+#editorPanel {
+    width: 480px;
+    min-width: 280px;
+    max-width: 600px;
+    background: linear-gradient(145deg, #ffffff, #f0f4f8);
+    border: none;
+    border-radius: 12px 0 0 12px;
+    box-shadow: -5px 0 15px rgba(0,0,0,0.1);
+    padding: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+#resizer {
+    width: 8px;
+    cursor: col-resize;
+    background-color: #c0c0c0;
+    border-left: 1px solid #aaa;
+    border-right: 1px solid #aaa;
+    flex-shrink: 0;
+}
+
+#resizer:hover {
+    background-color: #a0a0a0;
+}
+
+#controlPanel h2 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.2em;
+    user-select: none;
+}
+
+.control-group {
+    margin-bottom: 12px;
+    background: rgba(255,255,255,0.7);
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    transition: transform 0.2s ease;
+}
+
+.control-group:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.control-group label {
+    display: block;
+    font-size: .9em;
+    margin-bottom: 3px;
+    cursor: help;
+    user-select: none;
+}
+
+.control-group input[type=range],
+.control-group input[type=number] {
+    width: calc(100% - 45px);
+    vertical-align: middle;
+}
+
+.control-group input[type=checkbox] {
+    vertical-align: middle;
+    margin-left: 5px
+}
+
+input[type=file] {
+    display: none
+}
+
+.control-group span {
+    display: inline-block;
+    width: 40px;
+    text-align: right;
+    font-size: .85em;
+    vertical-align: middle;
+    margin-left: 5px
+}
+
+.control-group .checkbox-label {
+    display: inline-block;
+    margin-left: 5px;
+    font-size: .9em;
+    cursor: default
+}
+
+#generationCounter {
+    font-size: .9em;
+    margin-top: 10px;
+    color: #333;
+    text-align: center;
+    font-weight: 700
+}
+
+#mainContent {
+    flex-grow: 1;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
+    overflow: hidden;
+    min-width: 300px;
+    background: rgba(255,255,255,0.95);
+    border-radius: 12px;
+    margin: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    backdrop-filter: blur(10px);
+}
+
+#mainContent h1 {
+    margin-top: 0;
+    margin-bottom: 5px;
+    font-size: 1.5em;
+    text-align: center;
+    color: #333
+}
+
+#mainContent p {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: .9em;
+    color: #555;
+    text-align: center;
+    max-width: 800px
+}
+
+canvas {
+    border: 1px solid #000;
+    background-color: #222;
+    cursor: crosshair;
+    max-width: 100%;
+    max-height: calc(100vh - 150px);
+    display: block;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, .2);
+    border-radius: 12px;
+}
+
+button {
+    padding: 8px 15px;
+    font-size: .95em;
+    cursor: pointer;
+    margin-top: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 8px;
+    font-weight: 500;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: .6;
+    background-color: #ddd !important;
+    color: #888 !important
+}
+
+#runButton { 
+    background: linear-gradient(45deg, #4ade80, #22c55e); 
+    color: white; 
+    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+}
+
+#pauseButton { 
+    background: linear-gradient(45deg, #fbbf24, #f59e0b); 
+    color: white; 
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+}
+
+#resetSimButton { 
+    background: linear-gradient(45deg, #60a5fa, #3b82f6); 
+    color: white; 
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+#clearAllButton { 
+    background: linear-gradient(45deg, #f87171, #ef4444); 
+    color: white; 
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+}
+
+#saveButton { 
+    background: linear-gradient(45deg, #a78bfa, #8b5cf6); 
+    color: white; 
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+}
+
+#importButton { 
+    background: linear-gradient(45deg, #06b6d4, #0891b2); 
+    color: white; 
+    box-shadow: 0 4px 15px rgba(8, 145, 178, 0.3);
+}
+
+#optimizeButton { 
+    background: linear-gradient(45deg, #f97316, #ea580c); 
+    color: white; 
+    box-shadow: 0 4px 15px rgba(234, 88, 12, 0.3);
+}
+
+#importBgButton { 
+    background: linear-gradient(45deg, #ec4899, #db2777); 
+    color: white; 
+    box-shadow: 0 4px 15px rgba(219, 39, 119, 0.3);
+}
+
+#addPointBtn,
+#saveScenarioBtn,
+#loadScenarioBtn,
+.map-btn,
+#zoomInBtn,
+#zoomOutBtn,
+#playTimelineBtn,
+#pauseTimelineBtn,
+#resetTimelineBtn,
+#exportAnalysisBtn,
+#compareNetworksBtn,
+#autoOptimizeSpeed {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+button:hover:not(:disabled) {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
+}
+
+#controlPanel .separator { 
+    border-top: 1px solid #ccc; 
+    margin: 15px 0 
+}
+
+.button-group { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 5px; 
+    margin-top: 10px 
+}
+
+.button-group button { 
+    margin-top: 0 
+}
+
+.background-controls { 
+    margin-top: 10px; 
+    padding-top: 10px; 
+    border-top: 1px solid #ccc 
+}
+
+.tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 0;
+    background: rgba(255,255,255,0.9);
+    border-radius: 8px 8px 0 0;
+    padding: 6px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 10px 6px;
+    background: #e0e0e0;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    font-size: 0.8em;
+    min-width: 90px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tab-btn.active {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.tab-content {
+    display: none;
+    padding: 12px;
+    flex: 1;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+#pointsList { 
+    list-style: none; 
+    padding: 0; 
+}
+
+#pointsList li { 
+    margin: 4px 0; 
+    display: flex; 
+    align-items: center; 
+    gap: 5px; 
+}
+
+.point-label-input { 
+    width: 70px; 
+}
+
+.point-coord-input { 
+    width: 45px; 
+}
+
+.delete-point-btn { 
+    color: #c00; 
+    background: none; 
+    border: none; 
+    cursor: pointer; 
+}
+
+.map-btn { 
+    margin: 2px 2px 2px 0; 
+}
+
+#analysisStats {
+    font-size: 0.98em;
+    margin-bottom: 10px;
+    background: rgba(255,255,255,0.8);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.quality-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 8px;
+    background: rgba(255,255,255,0.8);
+    border-radius: 6px;
+}
+
+.quality-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ccc;
+}
+
+.quality-dot.excellent { 
+    background: #4ade80; 
+}
+
+.quality-dot.good { 
+    background: #fbbf24; 
+}
+
+.quality-dot.poor { 
+    background: #ef4444; 
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 4px 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+input[type="range"] {
+    appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    outline: none;
+    width: calc(100% - 45px);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #667eea;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+/* Context Menu Styles */
+.context-menu {
+    position: fixed;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    display: none;
+    min-width: 150px;
+    font-family: inherit;
+    font-size: 14px;
+}
+
+.context-menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.context-menu-item:hover {
+    background-color: #f0f0f0;
+}
+
+/* Modal Styles */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.modal-dialog {
+    background: white;
+    padding: 24px;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    min-width: 300px;
+    max-width: 400px;
+}
+
+.modal-input {
+    width: 100%;
+    padding: 8px;
+    margin-top: 4px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.modal-buttons {
+    text-align: right;
+    margin-top: 20px;
+}
+
+.modal-btn {
+    padding: 8px 16px;
+    margin-left: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.modal-btn.primary {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
