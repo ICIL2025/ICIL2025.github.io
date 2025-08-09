@@ -7,7 +7,7 @@ let agentEfficiency = 0;
 const canvas = document.getElementById('simulationCanvas');
 const ctx = canvas.getContext('2d');
 
-const controlPanel = document.getElementById('controlPanel');
+const controlPanel = document.getElementById('editorPanel');
 const resizer = document.getElementById('resizer');
 const controls = { 
     numAgents: document.getElementById('numAgents'), 
@@ -663,22 +663,55 @@ function assessSimulationQuality() {
     // Calculate path efficiency
     let totalTrailValue = 0;
     let activeTrailCells = 0;
+    let maxTrailValue = 0;
     
     for (let x = 0; x < gridWidth; x++) {
         for (let y = 0; y < gridHeight; y++) {
-            if (trailMap[x][y] > 1) {
-                totalTrailValue += trailMap[x][y];
+            const trailValue = trailMap[x][y];
+            if (trailValue > 0.1) { // Lower threshold for detecting trails
+                totalTrailValue += trailValue;
                 activeTrailCells++;
+                maxTrailValue = Math.max(maxTrailValue, trailValue);
             }
         }
     }
     
-    // Calculate metrics
-    const trailDensity = activeTrailCells / (gridWidth * gridHeight);
+    // Calculate metrics with better scaling
+    const totalCells = gridWidth * gridHeight;
+    const trailDensity = activeTrailCells / totalCells;
     const avgTrailStrength = activeTrailCells > 0 ? totalTrailValue / activeTrailCells : 0;
     
-    simulationQuality = Math.min(100, (trailDensity * 100 + avgTrailStrength / 10) / 2);
-    convergenceRate = Math.min(100, generationCount / 500 * 100);
+    // Improved quality calculation
+    let qualityScore = 0;
+    
+    if (activeTrailCells > 0) {
+        // Trail coverage component (0-40 points)
+        const coverageScore = Math.min(40, trailDensity * 400);
+        
+        // Trail strength component (0-30 points)
+        const strengthScore = Math.min(30, (avgTrailStrength / 10) * 30);
+        
+        // Path connectivity component (0-30 points)
+        let connectivityScore = 0;
+        if (lastOptimizedPathPoints && lastOptimizedPathPoints.length > 1) {
+            connectivityScore = Math.min(30, (lastOptimizedPathPoints.length / foodSources.length) * 30);
+        }
+        
+        qualityScore = coverageScore + strengthScore + connectivityScore;
+    }
+    
+    simulationQuality = Math.min(100, qualityScore);
+    convergenceRate = Math.min(100, (generationCount / 500) * 100);
+    
+    // Debug logging
+    if (generationCount % 100 === 0) {
+        console.log(`Quality Assessment - Generation ${generationCount}:`);
+        console.log(`  Active trail cells: ${activeTrailCells} / ${totalCells}`);
+        console.log(`  Trail density: ${(trailDensity * 100).toFixed(2)}%`);
+        console.log(`  Average trail strength: ${avgTrailStrength.toFixed(2)}`);
+        console.log(`  Max trail value: ${maxTrailValue.toFixed(2)}`);
+        console.log(`  Quality score: ${simulationQuality.toFixed(1)}%`);
+    }
     
     // Update UI
     updateQualityIndicators();
@@ -989,22 +1022,6 @@ canvas.addEventListener('mousedown', e => {
 
 canvas.addEventListener('mouseup', () => { draggingIdx = null; });
 canvas.addEventListener('mouseleave', () => { draggingIdx = null; });
-// Right click to delete
-canvas.addEventListener('contextmenu', e => {
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-    for (let i=0; i<foodSources.length; ++i) {
-        if ((foodSources[i].x-x)**2 + (foodSources[i].y-y)**2 < 64) {
-            foodSources.splice(i,1);
-            renderPointsList();
-            drawStaticElements();
-            e.preventDefault();
-            return false;
-        }
-    }
-});
-
 // --- Analysis ---
 function analyzeNetwork() {
     let length = 0, avg = 0, efficiency = 0;
@@ -1114,26 +1131,6 @@ function playTimeline() {
     timelineAnimationId = setTimeout(playTimeline, 100);
 }
 
-// --- Modified Animation Loop to save snapshots ---
-function animate() { 
-    if (!simulationRunning) { 
-        animationFrameId = null; 
-        return; 
-    } 
-    generationCount++; 
-    generationCounter.textContent = `Generation: ${generationCount}`; 
-    updateAgents(); 
-    updateTrailMap(); 
-    drawSimulation(); 
-    
-    // Save snapshot every 10 generations
-    if (generationCount % 10 === 0) {
-        saveTrailSnapshot();
-    }
-    
-    animationFrameId = requestAnimationFrame(animate); 
-}
-
 // --- Scenarios (FIXED loading) ---
 function updateScenarioDropdown() {
     const dd = document.getElementById('scenarioDropdown');
@@ -1172,40 +1169,84 @@ document.getElementById('loadScenarioBtn').onclick = () => {
 
 // --- Preset Maps (FIXED) ---
 const presetMaps = {
-    tokyo: [{x:100,y:100,label:"Shinjuku"},{x:300,y:200,label:"Ueno"},{x:500,y:400,label:"Shibuya"}],
-    osaka: [{x:120,y:180,label:"Namba"},{x:400,y:300,label:"Umeda"}],
-    zagreb: [{x:150,y:150,label:"Trg"},{x:350,y:350,label:"Jarun"},{x:250,y:400,label:"Maksimir"}]
+    tokyo: {
+        points: [{x:100,y:100,label:"Shinjuku"},{x:300,y:200,label:"Ueno"},{x:500,y:400,label:"Shibuya"}],
+        background: './background/Tokyo.png'
+    },
+    zagreb: {
+        points: [{x:150,y:150,label:"Trg"},{x:350,y:350,label:"Jarun"},{x:250,y:400,label:"Maksimir"}],
+        background: './background/Zagreb.png'
+    }
 };
+
+// Helper function to load background image
+function loadBackgroundImage(imagePath) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            console.log(`Background image loaded successfully: ${imagePath}`);
+            backgroundImage = img;
+            controls.showBackground.checked = true;
+            showBackground = true;
+            updateParams();
+            resolve(img);
+        };
+        img.onerror = () => {
+            console.warn(`Could not load background image: ${imagePath}`);
+            backgroundImage = null;
+            controls.showBackground.checked = false;
+            showBackground = false;
+            updateParams();
+            reject(new Error(`Failed to load ${imagePath}`));
+        };
+        img.src = imagePath;
+    });
+}
+
 document.querySelectorAll('.map-btn').forEach(btn => {
-    btn.onclick = () => {
-        const map = btn.dataset.map;
-        if (presetMaps[map]) {
+    btn.onclick = async () => {
+        const mapKey = btn.dataset.map;
+        const mapData = presetMaps[mapKey];
+        
+        if (mapData) {
             // Adjust coordinates to current canvas size
             const scaleX = canvasWidth / 600;
             const scaleY = canvasHeight / 500;
-            foodSources = presetMaps[map].map(point => ({
+            
+            // Load points
+            foodSources = mapData.points.map(point => ({
                 x: point.x * scaleX,
                 y: point.y * scaleY,
                 label: point.label
             }));
+            
+            // Load background image if available
+            if (mapData.background) {
+                try {
+                    await loadBackgroundImage(mapData.background);
+                    console.log(`Loaded preset: ${mapKey} with background`);
+                } catch (error) {
+                    console.warn(`Loaded preset: ${mapKey} without background (${error.message})`);
+                }
+            } else {
+                // Clear background if no background specified
+                backgroundImage = null;
+                controls.showBackground.checked = false;
+                showBackground = false;
+                updateParams();
+            }
+            
             renderPointsList();
             drawStaticElements();
+            
+            // Clear any existing optimized path since we have new points
+            lastOptimizedPathPoints = null;
+            isOptimizedViewActive = false;
         }
     };
 });
 
-// --- Zoom Controls (FIXED) ---
-document.getElementById('zoomInBtn').onclick = () => { 
-    bgZoom *= 1.1; 
-    drawStaticElements(); 
-};
-
-document.getElementById('zoomOutBtn').onclick = () => { 
-    bgZoom /= 1.1; 
-    drawStaticElements(); 
-};
-
-// --- Load scenarios from localStorage ---
+// --- Load scenario from localStorage ---
 function loadSavedScenarios() {
     const saved = localStorage.getItem('slime_scenarios');
     if (saved) {
@@ -1297,6 +1338,64 @@ function clearAndDrawBackground() {
     }
 }
 
+function drawOptimizedSingleCurve(pathPoints) {
+    if (!pathPoints || pathPoints.length < 2) return;
+    
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([]);
+    
+    ctx.beginPath();
+    ctx.moveTo(pathPoints[0].x, pathPoints[0].y);
+    
+    // Draw smooth curve through all points
+    if (pathPoints.length === 2) {
+        ctx.lineTo(pathPoints[1].x, pathPoints[1].y);
+    } else {
+        for (let i = 1; i < pathPoints.length - 1; i++) {
+            const current = pathPoints[i];
+            const next = pathPoints[i + 1];
+            const midX = (current.x + next.x) / 2;
+            const midY = (current.y + next.y) / 2;
+            ctx.quadraticCurveTo(current.x, current.y, midX, midY);
+        }
+        // Draw to the last point
+        const lastPoint = pathPoints[pathPoints.length - 1];
+        const secondLast = pathPoints[pathPoints.length - 2];
+        ctx.quadraticCurveTo(secondLast.x, secondLast.y, lastPoint.x, lastPoint.y);
+    }
+    
+    ctx.stroke();
+    
+    // Draw direction arrows
+    ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+    for (let i = 0; i < pathPoints.length - 1; i++) {
+        const current = pathPoints[i];
+        const next = pathPoints[i + 1];
+        const angle = Math.atan2(next.y - current.y, next.x - current.x);
+        
+        const midX = (current.x + next.x) / 2;
+        const midY = (current.y + next.y) / 2;
+        
+        // Draw small arrow
+        const arrowLength = 8;
+        const arrowAngle = Math.PI / 6; // 30 degrees
+        
+        ctx.beginPath();
+        ctx.moveTo(midX, midY);
+        ctx.lineTo(
+            midX - arrowLength * Math.cos(angle - arrowAngle),
+            midY - arrowLength * Math.sin(angle - arrowAngle)
+        );
+        ctx.moveTo(midX, midY);
+        ctx.lineTo(
+            midX - arrowLength * Math.cos(angle + arrowAngle),
+            midY - arrowLength * Math.sin(angle + arrowAngle)
+        );
+        ctx.stroke();
+    }
+}
+
 function drawFoodSources() {
     ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
     ctx.strokeStyle = 'rgba(255, 50, 50, 1)';
@@ -1318,43 +1417,6 @@ function drawFoodSources() {
             ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
         }
     });
-}
-
-// Fix the analyzeNetwork function
-function analyzeNetwork() {
-    let length = 0, avg = 0, efficiency = 0;
-    if (lastOptimizedPathPoints && lastOptimizedPathPoints.length > 1) {
-        for (let i=1; i<lastOptimizedPathPoints.length; ++i) {
-            const dx = lastOptimizedPathPoints[i].x - lastOptimizedPathPoints[i-1].x;
-            const dy = lastOptimizedPathPoints[i].y - lastOptimizedPathPoints[i-1].y;
-            length += Math.sqrt(dx*dx + dy*dy);
-        }
-        avg = length/(lastOptimizedPathPoints.length-1);
-        
-        // Calculate efficiency (shorter is better)
-        const directDistance = Math.sqrt(
-            Math.pow(lastOptimizedPathPoints[lastOptimizedPathPoints.length-1].x - lastOptimizedPathPoints[0].x, 2) +
-            Math.pow(lastOptimizedPathPoints[lastOptimizedPathPoints.length-1].y - lastOptimizedPathPoints[0].y, 2)
-        );
-        efficiency = directDistance / length;
-    }
-    
-    const analysisElement = document.getElementById('analysisStats');
-    if (analysisElement) {
-        analysisElement.innerHTML =
-            `Path length: ${length.toFixed(1)} px<br>
-            Number of points: ${foodSources.length}<br>
-            Average distance: ${avg.toFixed(1)} px<br>
-            Generation: ${generationCount}`;
-    }
-        
-    const efficiencyElement = document.getElementById('efficiencyStats');
-    if (efficiencyElement) {
-        efficiencyElement.innerHTML =
-            `Efficiency ratio: ${(efficiency * 100).toFixed(1)}%<br>
-            Trail snapshots: ${trailHistory.length}<br>
-            Active agents: ${agents.length}`;
-    }
 }
 
 // Add the missing compare networks functionality
@@ -1382,10 +1444,14 @@ document.getElementById('compareNetworksBtn').onclick = () => {
     URL.revokeObjectURL(url);
 };
 
-// Fix window resize handler
+// Fix window resize handler with debounce
+let resizeTimeout;
 window.addEventListener('resize', () => {
-    setupCanvas();
-    drawStaticElements();
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        setupCanvas();
+        drawStaticElements();
+    }, 250);
 });
 
 function drawStaticElements() {
