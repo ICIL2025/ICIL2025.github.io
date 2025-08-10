@@ -4,14 +4,25 @@ const urlsToCache = [
   './index.html',
   './styles.css',
   './script.js',
-  './background/tokyo.jpg',
-  './background/zagreb.jpg'
+  './manifest.webmanifest'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
+      .then(cache => {
+        return cache.addAll(urlsToCache).catch(error => {
+          console.error('Cache addAll failed:', error);
+          // Cache core files individually if batch fails
+          return Promise.all(
+            urlsToCache.map(url => {
+              return cache.add(url).catch(err => {
+                console.warn(`Failed to cache ${url}:`, err);
+              });
+            })
+          );
+        });
+      })
   );
 });
 
