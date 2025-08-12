@@ -10,9 +10,9 @@ body {
 }
 
 #editorPanel {
-    width: 480px;
-    min-width: 280px;
-    max-width: 600px;
+    width: 580px;
+    min-width: 380px;
+    max-width: 700px;
     background: rgba(248, 250, 252, 0.95);
     border: none;
     border-right: 1px solid #cbd5e1;
@@ -140,14 +140,19 @@ input[type=file] {
 }
 
 canvas {
-    border: 1px solid #cbd5e1;
+    border: 3px solid #3b82f6;
     background-color: #ffffff;
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(71, 85, 105, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(59, 130, 246, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.1);
     cursor: crosshair;
     max-width: 100%;
     max-height: calc(100vh - 150px);
     display: block;
+    transition: box-shadow 0.3s ease;
+}
+
+canvas:hover {
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2), 0 0 0 1px rgba(59, 130, 246, 0.2);
 }
 
 button {
@@ -334,16 +339,16 @@ button:hover:not(:disabled) {
 
 .tab-btn {
     flex: 1;
-    padding: 12px 16px;
+    padding: 14px 20px;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
     cursor: pointer;
     transition: all 0.2s ease;
     font-weight: 400;
-    font-size: 0.9em;
+    font-size: 0.92em;
     color: #64748b;
-    min-width: 90px;
+    min-width: 95px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -363,8 +368,11 @@ button:hover:not(:disabled) {
 
 .tab-content {
     display: none;
-    padding: 12px;
+    padding: 16px;
     flex: 1;
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(8px);
+    border-radius: 0 0 8px 8px;
 }
 
 .tab-content.active {
@@ -377,29 +385,92 @@ button:hover:not(:disabled) {
 }
 
 #pointsList li { 
-    margin: 4px 0; 
+    margin: 8px 0; 
     display: flex; 
     align-items: center; 
-    gap: 5px; 
+    gap: 8px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+}
+
+#pointsList li:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: #94a3b8;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(71, 85, 105, 0.1);
 }
 
 .point-label-input { 
-    width: 70px; 
+    width: 80px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #334155;
+    font-size: 0.9em;
+}
+
+.point-label-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: rgba(255, 255, 255, 1);
 }
 
 .point-coord-input { 
-    width: 45px; 
+    width: 55px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #334155;
+    font-size: 0.9em;
+}
+
+.point-coord-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: rgba(255, 255, 255, 1);
 }
 
 .delete-point-btn { 
-    color: #c00; 
-    background: none; 
-    border: none; 
-    cursor: pointer; 
+    color: #ef4444; 
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.8em;
+}
+
+.delete-point-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #f87171;
+    color: #dc2626;
 }
 
 .map-btn { 
-    margin: 2px 2px 2px 0; 
+    margin: 4px 4px 4px 0;
+    padding: 6px 12px;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    border: 1px solid #93c5fd;
+    border-radius: 4px;
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+}
+
+.map-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #60a5fa;
+    color: #1d4ed8;
+    transform: translateY(-1px);
 }
 
 #analysisStats {
@@ -464,6 +535,7 @@ button:hover:not(:disabled) {
 
 input[type="range"] {
     appearance: none;
+    -webkit-appearance: none;
     height: 6px;
     border-radius: 3px;
     background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e1 100%);
@@ -472,7 +544,9 @@ input[type="range"] {
     box-shadow: inset 0 1px 2px rgba(71, 85, 105, 0.1);
 }
 
+/* Webkit (Chrome, Safari) */
 input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
     appearance: none;
     width: 18px;
     height: 18px;
@@ -487,6 +561,45 @@ input[type="range"]::-webkit-slider-thumb {
 input[type="range"]::-webkit-slider-thumb:hover {
     transform: scale(1.1);
     box-shadow: 0 3px 8px rgba(59, 130, 246, 0.4);
+}
+
+/* Firefox */
+input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+    transition: all 0.2s ease;
+}
+
+input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e1 100%);
+    border: none;
+    box-shadow: inset 0 1px 2px rgba(71, 85, 105, 0.1);
+}
+
+/* Edge */
+input[type="range"]::-ms-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+}
+
+input[type="range"]::-ms-track {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e1 100%);
+    border: none;
+    box-shadow: inset 0 1px 2px rgba(71, 85, 105, 0.1);
 }
 
 /* Context Menu Styles */
@@ -655,19 +768,21 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .form-group input {
     width: 100%;
-    padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    color: #ffffff;
+    padding: 12px 16px;
+    background: rgba(248, 250, 252, 0.05);
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    color: #f8fafc;
     font-size: 14px;
     box-sizing: border-box;
+    transition: all 0.3s ease;
 }
 
 .form-group input:focus {
     outline: none;
-    border-color: rgba(0, 122, 255, 0.6);
-    background: rgba(255, 255, 255, 0.15);
+    border-color: #3b82f6;
+    background: rgba(248, 250, 252, 0.1);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .modal-content .modal-buttons {
@@ -728,4 +843,169 @@ input[type="range"]::-webkit-slider-thumb:hover {
     background: rgba(100, 100, 255, 0.3);
     color: #2196F3;
     border: 1px solid rgba(100, 100, 255, 0.6);
+}
+
+/* Modern select styling */
+select {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(248, 250, 252, 0.05);
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    color: #f8fafc;
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23cbd5e1' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 12px center;
+    background-repeat: no-repeat;
+    background-size: 16px;
+    padding-right: 40px;
+}
+
+select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: rgba(248, 250, 252, 0.1);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+select option {
+    background: #1e293b;
+    color: #f8fafc;
+    padding: 8px 12px;
+}
+
+/* Analysis tab specific styling */
+#networkMetrics {
+    background: rgba(248, 250, 252, 0.03);
+    border: 1px solid #475569;
+    border-radius: 8px;
+    padding: 12px;
+    backdrop-filter: blur(10px);
+}
+
+#networkMetrics div {
+    padding: 6px 0;
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(203, 213, 225, 0.1);
+    color: #cbd5e1;
+}
+
+#networkMetrics div:last-child {
+    border-bottom: none;
+}
+
+#networkMetrics span {
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+#analysisStats {
+    background: rgba(248, 250, 252, 0.03) !important;
+    border: 1px solid #475569 !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+    backdrop-filter: blur(10px);
+    color: #cbd5e1 !important;
+    line-height: 1.6 !important;
+    margin-top: 10px !important;
+    font-size: 0.9em !important;
+}
+
+/* Timeline controls styling */
+#generationSlider {
+    flex: 1;
+}
+
+#timelineValue {
+    min-width: 40px;
+    text-align: center;
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+/* Comparison tab styling */
+#comparisonTable {
+    width: 100%;
+    border-collapse: collapse;
+    background: rgba(248, 250, 252, 0.03);
+    border: 1px solid #475569;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 12px;
+}
+
+#comparisonTable th {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    padding: 12px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.85em;
+    border-bottom: 1px solid #475569;
+}
+
+#comparisonTable td {
+    padding: 10px 8px;
+    border-bottom: 1px solid rgba(203, 213, 225, 0.1);
+    color: #cbd5e1;
+    font-size: 0.9em;
+}
+
+#comparisonTable tr:hover {
+    background: rgba(248, 250, 252, 0.05);
+}
+
+#comparisonTable button {
+    padding: 4px 8px;
+    font-size: 0.8em;
+    border-radius: 4px;
+    border: 1px solid #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#comparisonTable button:hover {
+    background: rgba(59, 130, 246, 0.2);
+    transform: translateY(-1px);
+}
+
+.chart-section {
+    margin: 12px 0;
+    padding: 12px;
+    background: rgba(248, 250, 252, 0.03);
+    border: 1px solid #475569;
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.chart-section h4 {
+    color: #3b82f6;
+    margin: 0 0 8px 0;
+    font-size: 0.9em;
+    font-weight: 600;
+}
+
+#chartsContainer canvas {
+    background: rgba(248, 250, 252, 0.02);
+    border-radius: 4px;
+    width: 100%;
+    max-width: 300px;
+    height: auto;
+}
+
+#optimizationStatus {
+    color: #cbd5e1;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+    background: rgba(248, 250, 252, 0.03);
+    border: 1px solid #475569;
+    border-radius: 8px;
 }

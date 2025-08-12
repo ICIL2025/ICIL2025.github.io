@@ -91,6 +91,33 @@ let bgZoom = 1;
 let scenarios = {};
 let draggingIdx = null, dragOffset = {x:0, y:0};
 
+// TSP Optimization variables
+let distanceCache = new Map();
+let optimizationResults = [];
+let isOptimizationAnimating = false;
+let currentOptimizationData = null;
+const TSP_COLORS = {
+    tpsma: '#00c853',
+    ga: '#1e90ff', 
+    christofides: '#ff3b30'
+};
+
+// RNG for deterministic results
+class SeededRandom {
+    constructor(seed = 12345) {
+        this.seed = seed;
+    }
+    
+    next() {
+        this.seed = (this.seed * 9301 + 49297) % 233280;
+        return this.seed / 233280;
+    }
+    
+    nextInt(max) {
+        return Math.floor(this.next() * max);
+    }
+}
+
 function resize(e) {
     const newWidth = e.clientX - controlPanel.getBoundingClientRect().left;
     controlPanel.style.width = `${newWidth}px`;
@@ -681,17 +708,377 @@ function handleOptimizeClick() {
     }
 }
 
-// Get food source order (nearest neighbor heuristic)
+// === TSP OPTIMIZER HANDLERS ===
+function handleRunSelectedOptimizer() {
+    if (foodSources.length < 3) {
+        alert("Need at least 3 food sources for TSP optimization.");
+        return;
+    }
+    
+    const tspOptimizer = document.getElementById('tspOptimizer');
+    if (!tspOptimizer) return;
+    
+    const selectedAlgorithm = tspOptimizer.value;
+    const animateCheckbox = document.getElementById('animateOptimization');
+    const shouldAnimate = animateCheckbox && animateCheckbox.checked;
+    
+    runSingleTSPOptimizer(selectedAlgorithm, shouldAnimate);
+}
+
+function handleRunAllOptimizers() {
+    if (foodSources.length < 3) {
+        alert("Need at least 3 food sources for TSP optimization.");
+        return;
+    }
+    
+    runAllTSPOptimizers();
+}
+
+function handleExportComparison() {
+    if (optimizationResults.length === 0) {
+        alert("No optimization results to export. Run optimizations first.");
+        return;
+    }
+    
+    const exportData = {
+        timestamp: new Date().toISOString(),
+        foodSources: foodSources.map((fs, i) => ({x: fs.x, y: fs.y, label: `Point ${i+1}`})),
+        results: optimizationResults.map(result => ({
+            algorithm: result.algorithm,
+            length: result.length,
+            timeMs: result.timeMs,
+            improvements: result.improvements || 0,
+            seed: result.seed || 'default'
+        })),
+        environment: {
+            obstacles: obstaclePolygons.length,
+            canvasSize: {width: canvas.width, height: canvas.height}
+        }
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tsp_comparison_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function handleClearComparison() {
+    optimizationResults = [];
+    updateComparisonUI();
+    clearTSPVisualization();
+}
+
+function runSingleTSPOptimizer(algorithm, animate = false) {
+    clearDistanceCache(); // Refresh distance cache
+    
+    const startTime = performance.now();
+    let result;
+    
+    try {
+        switch(algorithm) {
+            case 'tpsma':
+                result = solveTPSMA();
+                break;
+            case 'ga':
+                result = solveGA();
+                break;
+            case 'christofides':
+                result = solveChristofides();
+                break;
+            default:
+                console.error('Unknown algorithm:', algorithm);
+                return;
+        }
+        
+        // Store result
+        result.seed = 'single_run';
+        result.improvements = 0; // Can be enhanced to track actual improvements
+        optimizationResults.push(result);
+        
+        // Update UI
+        updateComparisonUI();
+        
+        // Visualize result
+        if (animate) {
+            animateTSPSolution(result);
+        } else {
+            drawTSPSolution(result);
+        }
+        
+        console.log(`${algorithm.toUpperCase()} completed: ${result.length.toFixed(1)} pixels in ${result.timeMs.toFixed(1)}ms`);
+        
+    } catch (error) {
+        console.error('Error in TSP optimization:', error);
+        alert(`Error running ${algorithm}: ${error.message}`);
+    }
+}
+
+function runAllTSPOptimizers() {
+    const algorithms = ['tpsma', 'ga', 'christofides'];
+    const results = [];
+    
+    // Clear previous results
+    optimizationResults = [];
+    
+    for (const algorithm of algorithms) {
+        console.log(`Running ${algorithm.toUpperCase()}...`);
+        try {
+            clearDistanceCache(); // Fresh cache for each algorithm
+            
+            let result;
+            switch(algorithm) {
+                case 'tpsma':
+                    result = solveTPSMA();
+                    break;
+                case 'ga':
+                    result = solveGA();
+                    break;
+                case 'christofides':
+                    result = solveChristofides();
+                    break;
+            }
+            
+            result.seed = 'benchmark';
+            result.improvements = 0;
+            results.push(result);
+            
+        } catch (error) {
+            console.error(`Error in ${algorithm}:`, error);
+            results.push({
+                algorithm: algorithm,
+                length: Infinity,
+                timeMs: 0,
+                error: error.message
+            });
+        }
+    }
+    
+    optimizationResults = results;
+    updateComparisonUI();
+    drawAllTSPSolutions();
+    
+    // Switch to comparison tab
+    const comparisonTabBtn = document.querySelector('[data-tab="comparisonTab"]');
+    if (comparisonTabBtn) {
+        comparisonTabBtn.click();
+    }
+    
+    console.log('All optimizations completed');
+}
+
+// === TSP VISUALIZATION FUNCTIONS ===
+function updateComparisonUI() {
+    const statusDiv = document.getElementById('optimizationStatus');
+    const table = document.getElementById('comparisonTable');
+    const tableBody = document.getElementById('comparisonTableBody');
+    
+    if (optimizationResults.length === 0) {
+        if (statusDiv) statusDiv.textContent = 'No optimizations run yet';
+        if (table) table.style.display = 'none';
+        return;
+    }
+    
+    if (statusDiv) statusDiv.textContent = `${optimizationResults.length} optimization(s) completed`;
+    if (table) table.style.display = 'table';
+    
+    // Update table
+    if (tableBody) {
+        tableBody.innerHTML = '';
+        
+        optimizationResults.forEach((result, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${result.algorithm.toUpperCase()}</td>
+                <td>${result.length.toFixed(1)} px</td>
+                <td>${result.timeMs.toFixed(1)} ms</td>
+                <td>${result.improvements || 0}</td>
+                <td>${result.seed || 'N/A'}</td>
+                <td><button class="replay-btn" data-index="${index}">Replay</button></td>
+            `;
+            tableBody.appendChild(row);
+        });
+        
+        // Add event listeners for replay buttons
+        tableBody.querySelectorAll('.replay-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.target.getAttribute('data-index'));
+                if (optimizationResults[index]) {
+                    animateTSPSolution(optimizationResults[index]);
+                }
+            });
+        });
+    }
+    
+    // Update charts
+    updateComparisonCharts();
+}
+
+function updateComparisonCharts() {
+    // Simple bar chart implementation using canvas
+    const distanceChart = document.getElementById('distanceChart');
+    const timeChart = document.getElementById('timeChart');
+    
+    if (!distanceChart || !timeChart || optimizationResults.length === 0) return;
+    
+    drawBarChart(distanceChart, optimizationResults, 'length', 'Distance (px)');
+    drawBarChart(timeChart, optimizationResults, 'timeMs', 'Time (ms)');
+}
+
+function drawBarChart(canvas, data, property, label) {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 0, width, height);
+    
+    if (data.length === 0) return;
+    
+    const values = data.map(d => d[property]);
+    const maxValue = Math.max(...values);
+    const barWidth = width / data.length * 0.8;
+    const barSpacing = width / data.length * 0.2;
+    
+    data.forEach((item, i) => {
+        const barHeight = (item[property] / maxValue) * (height - 40);
+        const x = i * (barWidth + barSpacing) + barSpacing / 2;
+        const y = height - barHeight - 20;
+        
+        // Draw bar
+        ctx.fillStyle = TSP_COLORS[item.algorithm] || '#3b82f6';
+        ctx.fillRect(x, y, barWidth, barHeight);
+        
+        // Draw algorithm label
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(item.algorithm.toUpperCase(), x + barWidth/2, height - 5);
+        
+        // Draw value
+        ctx.fillText(item[property].toFixed(1), x + barWidth/2, y - 5);
+    });
+}
+
+function drawTSPSolution(result) {
+    if (!result || !result.tour) return;
+    
+    // Clear and redraw canvas
+    clearCanvas();
+    drawStaticElements();
+    
+    // Draw the TSP tour
+    drawTourPath(result.tour, TSP_COLORS[result.algorithm] || '#3b82f6', 3);
+    
+    // Update the optimized path for other functions
+    lastOptimizedPathPoints = result.tour;
+    isOptimizedViewActive = true;
+}
+
+function drawAllTSPSolutions() {
+    if (optimizationResults.length === 0) return;
+    
+    clearCanvas();
+    drawStaticElements();
+    
+    // Draw all solutions with different colors
+    optimizationResults.forEach(result => {
+        if (result.tour) {
+            const color = TSP_COLORS[result.algorithm] || '#3b82f6';
+            drawTourPath(result.tour, color, 2, 0.7); // Slightly transparent
+        }
+    });
+}
+
+function drawTourPath(tour, color, lineWidth = 2, alpha = 1.0) {
+    if (!tour || tour.length < 2) return;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    // Draw tour as smooth spline (Catmull-Rom)
+    drawCatmullRomSpline(tour);
+    
+    // Draw points
+    ctx.fillStyle = color;
+    tour.forEach(point => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+        ctx.fill();
+    });
+    
+    ctx.restore();
+}
+
+function animateTSPSolution(result) {
+    // Simple implementation - can be enhanced with actual step-by-step animation
+    drawTSPSolution(result);
+    
+    // Flash the solution
+    setTimeout(() => {
+        drawTSPSolution({...result, tour: []});
+        setTimeout(() => drawTSPSolution(result), 200);
+    }, 100);
+}
+
+function clearTSPVisualization() {
+    clearCanvas();
+    drawStaticElements();
+    isOptimizedViewActive = false;
+    lastOptimizedPathPoints = null;
+}
+
+// Get food source order (uses selected TSP optimizer or fallback to nearest neighbor)
 function getFoodSourceOrder() {
     if (foodSources.length === 0) return [];
     if (foodSources.length === 1) return [foodSources[0]];
     if (foodSources.length === 2) return [...foodSources];
     
+    // Check if we should use TSP optimizer
+    const tspOptimizer = document.getElementById('tspOptimizer');
+    if (tspOptimizer && foodSources.length >= 3) {
+        const algorithm = tspOptimizer.value;
+        try {
+            let result;
+            switch(algorithm) {
+                case 'tpsma':
+                    result = solveTPSMA();
+                    break;
+                case 'ga':
+                    result = solveGA();
+                    break;
+                case 'christofides':
+                    result = solveChristofides();
+                    break;
+                default:
+                    return solveBFS();
+            }
+            return result.tour || solveBFS();
+        } catch (error) {
+            console.error('Error in TSP optimization, falling back to nearest neighbor:', error);
+            return solveBFS();
+        }
+    }
+    
+    // Fallback to legacy solver selection
     switch (PARAMS.solver) {
-        case 'TPSMA': return solveTPSMA();
-        case 'GA': return solveGA();
-        case 'Christofides': return solveChristofides();
-        default: return solveBFS();
+        case 'tpsma':
+        case 'TPSMA':
+            try {
+                const result = solveTPSMA();
+                return result.tour || solveBFS();
+            } catch {
+                return solveBFS();
+            }
+        default:
+            return solveBFS();
     }
 }
 
@@ -724,87 +1111,703 @@ function solveBFS() {
     return optimizeWith2Opt(tour.map(index => foodSources[index]));
 }
 
-function solveTPSMA() {
-    const n = foodSources.length;
-    const D = Array(n).fill().map(() => Array(n).fill(1));
-    const L = Array(n).fill().map(i => Array(n).fill().map(j => obstacleAwareDistance(foodSources[i], foodSources[j])));
+// === TSP OPTIMIZATION ALGORITHMS ===
+
+// Distance calculation with obstacle awareness and caching
+function obstacleAwareDistance(a, b, useCache = true) {
+    if (useCache) {
+        const key = `${a.x},${a.y}-${b.x},${b.y}`;
+        if (distanceCache.has(key)) {
+            return distanceCache.get(key);
+        }
+    }
     
-    for (let iter = 0; iter < PARAMS.iterations; iter++) {
-        const P = solvePressure(D, L);
-        const Q = computeFlow(D, P, L);
+    let distance;
+    if (segmentCrossesObstacles(a, b)) {
+        distance = aStarDistance(a, b);
+    } else {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        distance = Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    if (useCache) {
+        const key = `${a.x},${a.y}-${b.x},${b.y}`;
+        distanceCache.set(key, distance);
+    }
+    
+    return distance;
+}
+
+function segmentCrossesObstacles(a, b) {
+    // Check against polygon obstacles - use the existing obstacles array
+    if (obstacles && obstacles.length > 0) {
+        for (const obstacle of obstacles) {
+            if (obstacle.points && lineIntersectsPolygon(a, b, obstacle.points)) {
+                return true;
+            }
+        }
+    }
+    
+    // Check against grid obstacles (if using grid-based simulation)
+    if (typeof grid !== 'undefined' && grid && grid.length > 0) {
+        return lineIntersectsGrid(a, b);
+    }
+    
+    return false;
+}
+
+function lineIntersectsPolygon(a, b, polygon) {
+    for (let i = 0; i < polygon.length; i++) {
+        const p1 = polygon[i];
+        const p2 = polygon[(i + 1) % polygon.length];
+        if (linesIntersect(a, b, p1, p2)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function linesIntersect(a1, a2, b1, b2) {
+    const det = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x);
+    if (Math.abs(det) < 1e-10) return false;
+    
+    const t = ((b1.x - a1.x) * (b2.y - b1.y) - (b1.y - a1.y) * (b2.x - b1.x)) / det;
+    const u = ((b1.x - a1.x) * (a2.y - a1.y) - (b1.y - a1.y) * (a2.x - a1.x)) / det;
+    
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+function lineIntersectsGrid(a, b) {
+    // Simple grid intersection check - can be optimized with DDA algorithm
+    const steps = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    if (steps === 0) return false;
+    
+    const dx = (b.x - a.x) / steps;
+    const dy = (b.y - a.y) / steps;
+    
+    for (let i = 0; i <= steps; i++) {
+        const x = Math.floor(a.x + i * dx);
+        const y = Math.floor(a.y + i * dy);
         
-        let maxDelta = 0;
+        if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+            // Check if this grid cell is an obstacle (implementation depends on grid structure)
+            // For now, return false - can be enhanced based on specific grid implementation
+        }
+    }
+    return false;
+}
+
+function aStarDistance(start, end) {
+    // Simplified A* for distance calculation
+    // In a full implementation, this would use the actual A* pathfinding algorithm
+    // For now, return a penalty-adjusted Euclidean distance
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const euclidean = Math.sqrt(dx * dx + dy * dy);
+    
+    // Add penalty for obstacle crossing (rough approximation)
+    return euclidean * 1.5;
+}
+
+function clearDistanceCache() {
+    distanceCache.clear();
+}
+
+function solveTPSMA() {
+    const startTime = performance.now();
+    const n = foodSources.length;
+    
+    // Initialize distance matrix D and length matrix L
+    const D = Array(n).fill().map(() => Array(n).fill(1.0));
+    const L = Array(n).fill().map(() => Array(n).fill(0));
+    
+    // Compute obstacle-aware distances
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+            if (i !== j) {
+                L[i][j] = obstacleAwareDistance(foodSources[i], foodSources[j]);
+            }
+        }
+    }
+    
+    const params = {
+        epsilon: 0.1,
+        dt: 0.01,
+        delta: 0.001,
+        maxIter: 1000,
+        kSeeds: 3
+    };
+    
+    let bestTour = null;
+    let bestLength = Infinity;
+    const rng = new SeededRandom(12345);
+    
+    // Run k seeds
+    for (let seed = 0; seed < params.kSeeds; seed++) {
+        // Reset D matrix for each seed
         for (let i = 0; i < n; i++) {
             for (let j = 0; j < n; j++) {
-                if (i !== j) {
-                    const newD = D[i][j] + ((Math.abs(Q[i][j]) / (1 + Math.abs(Q[i][j]))) - D[i][j]) * PARAMS.dt;
-                    maxDelta = Math.max(maxDelta, Math.abs(newD - D[i][j]));
-                    D[i][j] = newD;
-                }
+                D[i][j] = 1.0 + rng.next() * 0.1; // Small random variation
             }
         }
         
-        if (maxDelta < PARAMS.delta) break;
+        // TPSMA iteration
+        for (let iter = 0; iter < params.maxIter; iter++) {
+            const P = solvePressure(D, L);
+            const Q = computeFlow(D, P, L);
+            
+            let maxDelta = 0;
+            for (let i = 0; i < n; i++) {
+                for (let j = 0; j < n; j++) {
+                    if (i !== j) {
+                        const flow = Math.abs(Q[i][j]);
+                        const newD = D[i][j] + ((flow / (1 + flow)) - D[i][j]) * params.dt;
+                        maxDelta = Math.max(maxDelta, Math.abs(newD - D[i][j]));
+                        D[i][j] = newD;
+                    }
+                }
+            }
+            
+            if (maxDelta < params.delta) break;
+        }
+        
+        // Construct tour from final D matrix
+        const tour = constructTourFromD(D, L, params.epsilon, rng);
+        const tourLength = calculateTourLength(tour);
+        
+        if (tourLength < bestLength) {
+            bestLength = tourLength;
+            bestTour = tour;
+        }
     }
     
-    const tour = constructTourFromD(D, L);
-    return optimizeWith2Opt(tour);
+    // Apply 2-opt optimization
+    const optimizedTour = optimizeWith2Opt(bestTour);
+    const finalLength = calculateTourLength(optimizedTour);
+    const timeMs = performance.now() - startTime;
+    
+    return {
+        tour: optimizedTour,
+        length: finalLength,
+        timeMs: timeMs,
+        iterations: params.maxIter,
+        algorithm: 'TPSMA'
+    };
 }
 
 function solvePressure(D, L) {
     const n = D.length;
-    const P = Array(n).fill(0);
     const A = Array(n).fill().map(() => Array(n).fill(0));
     const b = Array(n).fill(0);
     
+    // Build system Ax = b for pressure equation
     for (let i = 0; i < n; i++) {
+        let rowSum = 0;
         for (let j = 0; j < n; j++) {
             if (i !== j) {
                 const conductance = D[i][j] / L[i][j];
-                A[i][i] += conductance;
-                A[i][j] -= conductance;
+                A[i][j] = -conductance;
+                rowSum += conductance;
             }
         }
+        A[i][i] = rowSum;
+        b[i] = (i === 0) ? 1 : ((i === n-1) ? -1 : 0); // Source at 0, sink at n-1
     }
     
+    // Fix reference: set P[0] = 0
+    A[0] = Array(n).fill(0);
     A[0][0] = 1;
-    for (let j = 1; j < n; j++) A[0][j] = 0;
     b[0] = 0;
     
     return gaussianElimination(A, b);
 }
 
-function gaussianElimination(A, b) {
-    const n = A.length;
-    const x = [...b];
+function computeFlow(D, P, L) {
+    const n = D.length;
+    const Q = Array(n).fill().map(() => Array(n).fill(0));
     
     for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+            if (i !== j) {
+                Q[i][j] = (D[i][j] / L[i][j]) * (P[i] - P[j]);
+            }
+        }
+    }
+    
+    return Q;
+}
+
+function constructTourFromD(D, L, epsilon, rng) {
+    const n = D.length;
+    const visited = Array(n).fill(false);
+    const tour = [];
+    let current = 0;
+    
+    tour.push(foodSources[current]);
+    visited[current] = true;
+    
+    while (tour.length < n) {
+        const candidates = [];
+        let bestQ = -Infinity;
+        let betterQ = -Infinity;
+        let bestIdx = -1;
+        let betterIdx = -1;
+        
+        // Find best and second-best unvisited nodes based on conductance
+        for (let j = 0; j < n; j++) {
+            if (!visited[j]) {
+                const q = D[current][j] / L[current][j];
+                if (q > bestQ) {
+                    betterQ = bestQ;
+                    betterIdx = bestIdx;
+                    bestQ = q;
+                    bestIdx = j;
+                } else if (q > betterQ) {
+                    betterQ = q;
+                    betterIdx = j;
+                }
+            }
+        }
+        
+        // Two-way selection
+        if (bestIdx !== -1) {
+            candidates.push(bestIdx);
+            if (betterIdx !== -1) {
+                candidates.push(betterIdx);
+            }
+        }
+        
+        let nextIdx;
+        if (candidates.length > 1 && (bestQ - betterQ) > epsilon) {
+            nextIdx = candidates[rng.nextInt(candidates.length)];
+        } else {
+            nextIdx = bestIdx;
+        }
+        
+        if (nextIdx === -1) break;
+        
+        current = nextIdx;
+        tour.push(foodSources[current]);
+        visited[current] = true;
+    }
+    
+    return tour;
+}
+
+function gaussianElimination(A, b) {
+    const n = A.length;
+    const augmented = A.map((row, i) => [...row, b[i]]);
+    
+    // Forward elimination
+    for (let i = 0; i < n; i++) {
+        // Find pivot
         let maxRow = i;
         for (let k = i + 1; k < n; k++) {
-            if (Math.abs(A[k][i]) > Math.abs(A[maxRow][i])) {
+            if (Math.abs(augmented[k][i]) > Math.abs(augmented[maxRow][i])) {
                 maxRow = k;
             }
         }
-        [A[i], A[maxRow]] = [A[maxRow], A[i]];
-        [x[i], x[maxRow]] = [x[maxRow], x[i]];
         
+        // Swap rows
+        [augmented[i], augmented[maxRow]] = [augmented[maxRow], augmented[i]];
+        
+        // Make diagonal element 1 and eliminate column
         for (let k = i + 1; k < n; k++) {
-            const factor = A[k][i] / A[i][i];
-            for (let j = i; j < n; j++) {
-                A[k][j] -= factor * A[i][j];
+            if (Math.abs(augmented[i][i]) > 1e-10) {
+                const factor = augmented[k][i] / augmented[i][i];
+                for (let j = i; j <= n; j++) {
+                    augmented[k][j] -= factor * augmented[i][j];
+                }
             }
-            x[k] -= factor * x[i];
         }
     }
     
+    // Back substitution
+    const x = Array(n).fill(0);
     for (let i = n - 1; i >= 0; i--) {
+        x[i] = augmented[i][n];
         for (let j = i + 1; j < n; j++) {
-            x[i] -= A[i][j] * x[j];
+            x[i] -= augmented[i][j] * x[j];
         }
-        x[i] /= A[i][i];
+        if (Math.abs(augmented[i][i]) > 1e-10) {
+            x[i] /= augmented[i][i];
+        }
     }
     
     return x;
+}
+
+function calculateTourLength(tour) {
+    if (!tour || tour.length < 2) return 0;
+    
+    let totalLength = 0;
+    for (let i = 0; i < tour.length - 1; i++) {
+        totalLength += obstacleAwareDistance(tour[i], tour[i + 1]);
+    }
+    // Add return to start for complete tour
+    totalLength += obstacleAwareDistance(tour[tour.length - 1], tour[0]);
+    
+    return totalLength;
+}
+
+// === GENETIC ALGORITHM FOR TSP ===
+function solveGA() {
+    const startTime = performance.now();
+    const n = foodSources.length;
+    
+    const params = {
+        nPop: Math.max(50, n * 2),
+        maxGen: 500,
+        mutRate: 0.02,
+        elite: Math.max(2, Math.floor(params.nPop * 0.1)),
+        tournamentSize: 3
+    };
+    
+    const rng = new SeededRandom(54321);
+    
+    // Initialize population
+    let population = [];
+    
+    // Add nearest neighbor seed
+    population.push(createNearestNeighborTour());
+    
+    // Add random tours
+    for (let i = 1; i < params.nPop; i++) {
+        population.push(createRandomTour(rng));
+    }
+    
+    let bestTour = null;
+    let bestFitness = Infinity;
+    let generationsWithoutImprovement = 0;
+    
+    for (let gen = 0; gen < params.maxGen; gen++) {
+        // Evaluate fitness
+        const fitness = population.map(tour => calculateTourLength(tour));
+        
+        // Track best
+        const genBestIdx = fitness.indexOf(Math.min(...fitness));
+        if (fitness[genBestIdx] < bestFitness) {
+            bestFitness = fitness[genBestIdx];
+            bestTour = [...population[genBestIdx]];
+            generationsWithoutImprovement = 0;
+        } else {
+            generationsWithoutImprovement++;
+        }
+        
+        // Early termination
+        if (generationsWithoutImprovement > 50) break;
+        
+        // Create new population
+        const newPopulation = [];
+        
+        // Elitism
+        const sortedIndices = fitness.map((f, i) => ({f, i})).sort((a, b) => a.f - b.f);
+        for (let i = 0; i < params.elite; i++) {
+            newPopulation.push([...population[sortedIndices[i].i]]);
+        }
+        
+        // Generate offspring
+        while (newPopulation.length < params.nPop) {
+            const parent1 = tournamentSelection(population, fitness, params.tournamentSize, rng);
+            const parent2 = tournamentSelection(population, fitness, params.tournamentSize, rng);
+            
+            const child = orderedCrossover(parent1, parent2, rng);
+            
+            if (rng.next() < params.mutRate) {
+                mutate(child, rng);
+            }
+            
+            newPopulation.push(child);
+        }
+        
+        population = newPopulation;
+    }
+    
+    const timeMs = performance.now() - startTime;
+    
+    return {
+        tour: bestTour,
+        length: bestFitness,
+        timeMs: timeMs,
+        generations: Math.min(params.maxGen, generationsWithoutImprovement + 50),
+        algorithm: 'GA'
+    };
+}
+
+function createNearestNeighborTour() {
+    const visited = Array(foodSources.length).fill(false);
+    const tour = [foodSources[0]];
+    visited[0] = true;
+    
+    let current = 0;
+    while (tour.length < foodSources.length) {
+        let nearestIdx = -1;
+        let minDist = Infinity;
+        
+        for (let i = 0; i < foodSources.length; i++) {
+            if (!visited[i]) {
+                const dist = obstacleAwareDistance(foodSources[current], foodSources[i]);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestIdx = i;
+                }
+            }
+        }
+        
+        if (nearestIdx !== -1) {
+            tour.push(foodSources[nearestIdx]);
+            visited[nearestIdx] = true;
+            current = nearestIdx;
+        }
+    }
+    
+    return tour;
+}
+
+function createRandomTour(rng) {
+    const tour = [...foodSources];
+    // Fisher-Yates shuffle
+    for (let i = tour.length - 1; i > 0; i--) {
+        const j = rng.nextInt(i + 1);
+        [tour[i], tour[j]] = [tour[j], tour[i]];
+    }
+    return tour;
+}
+
+function tournamentSelection(population, fitness, tournamentSize, rng) {
+    let bestIdx = rng.nextInt(population.length);
+    let bestFitness = fitness[bestIdx];
+    
+    for (let i = 1; i < tournamentSize; i++) {
+        const idx = rng.nextInt(population.length);
+        if (fitness[idx] < bestFitness) {
+            bestFitness = fitness[idx];
+            bestIdx = idx;
+        }
+    }
+    
+    return [...population[bestIdx]];
+}
+
+function orderedCrossover(parent1, parent2, rng) {
+    const n = parent1.length;
+    const start = rng.nextInt(n);
+    const end = start + rng.nextInt(n - start);
+    
+    const child = Array(n).fill(null);
+    const used = new Set();
+    
+    // Copy substring from parent1
+    for (let i = start; i <= end; i++) {
+        child[i] = parent1[i];
+        used.add(parent1[i]);
+    }
+    
+    // Fill remaining positions from parent2
+    let pos = 0;
+    for (let i = 0; i < n; i++) {
+        if (!used.has(parent2[i])) {
+            while (child[pos] !== null) pos++;
+            child[pos] = parent2[i];
+        }
+    }
+    
+    return child;
+}
+
+function mutate(tour, rng) {
+    const n = tour.length;
+    if (rng.next() < 0.5) {
+        // Swap mutation
+        const i = rng.nextInt(n);
+        const j = rng.nextInt(n);
+        [tour[i], tour[j]] = [tour[j], tour[i]];
+    } else {
+        // 2-opt mutation
+        const i = rng.nextInt(n);
+        const j = (i + 1 + rng.nextInt(n - 1)) % n;
+        let start = Math.min(i, j);
+        let end = Math.max(i, j);
+        
+        // Reverse segment
+        while (start < end) {
+            [tour[start], tour[end]] = [tour[end], tour[start]];
+            start++;
+            end--;
+        }
+    }
+}
+
+// === CHRISTOFIDES ALGORITHM ===
+function solveChristofides() {
+    const startTime = performance.now();
+    const n = foodSources.length;
+    
+    // Step 1: Build complete graph with obstacle-aware distances
+    const distances = Array(n).fill().map(() => Array(n).fill(0));
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+            if (i !== j) {
+                distances[i][j] = obstacleAwareDistance(foodSources[i], foodSources[j]);
+            }
+        }
+    }
+    
+    // Step 2: Find MST using Prim's algorithm
+    const mst = primMST(distances);
+    
+    // Step 3: Find odd-degree vertices
+    const degrees = Array(n).fill(0);
+    for (const edge of mst) {
+        degrees[edge.from]++;
+        degrees[edge.to]++;
+    }
+    
+    const oddVertices = [];
+    for (let i = 0; i < n; i++) {
+        if (degrees[i] % 2 === 1) {
+            oddVertices.push(i);
+        }
+    }
+    
+    // Step 4: Find minimum-weight perfect matching on odd vertices
+    const matching = minimumWeightMatching(oddVertices, distances);
+    
+    // Step 5: Combine MST and matching to form Eulerian multigraph
+    const multigraph = [...mst, ...matching];
+    
+    // Step 6: Find Eulerian tour
+    const eulerianTour = findEulerianTour(multigraph, n);
+    
+    // Step 7: Convert to Hamiltonian by shortcutting
+    const hamiltonianTour = shortcutToHamiltonian(eulerianTour);
+    
+    const tour = hamiltonianTour.map(i => foodSources[i]);
+    const length = calculateTourLength(tour);
+    const timeMs = performance.now() - startTime;
+    
+    return {
+        tour: tour,
+        length: length,
+        timeMs: timeMs,
+        algorithm: 'Christofides'
+    };
+}
+
+function primMST(distances) {
+    const n = distances.length;
+    const inMST = Array(n).fill(false);
+    const key = Array(n).fill(Infinity);
+    const parent = Array(n).fill(-1);
+    const mst = [];
+    
+    key[0] = 0;
+    
+    for (let count = 0; count < n; count++) {
+        // Find minimum key vertex not in MST
+        let u = -1;
+        for (let v = 0; v < n; v++) {
+            if (!inMST[v] && (u === -1 || key[v] < key[u])) {
+                u = v;
+            }
+        }
+        
+        inMST[u] = true;
+        
+        if (parent[u] !== -1) {
+            mst.push({from: parent[u], to: u, weight: distances[parent[u]][u]});
+        }
+        
+        // Update key values
+        for (let v = 0; v < n; v++) {
+            if (!inMST[v] && distances[u][v] < key[v]) {
+                parent[v] = u;
+                key[v] = distances[u][v];
+            }
+        }
+    }
+    
+    return mst;
+}
+
+function minimumWeightMatching(vertices, distances) {
+    const matching = [];
+    const used = Array(vertices.length).fill(false);
+    
+    // Greedy matching (not optimal but fast approximation)
+    for (let i = 0; i < vertices.length; i++) {
+        if (used[i]) continue;
+        
+        let bestJ = -1;
+        let bestWeight = Infinity;
+        
+        for (let j = i + 1; j < vertices.length; j++) {
+            if (!used[j]) {
+                const weight = distances[vertices[i]][vertices[j]];
+                if (weight < bestWeight) {
+                    bestWeight = weight;
+                    bestJ = j;
+                }
+            }
+        }
+        
+        if (bestJ !== -1) {
+            matching.push({
+                from: vertices[i], 
+                to: vertices[bestJ], 
+                weight: bestWeight
+            });
+            used[i] = true;
+            used[bestJ] = true;
+        }
+    }
+    
+    return matching;
+}
+
+function findEulerianTour(edges, n) {
+    // Build adjacency list
+    const adj = Array(n).fill().map(() => []);
+    for (const edge of edges) {
+        adj[edge.from].push(edge.to);
+        adj[edge.to].push(edge.from);
+    }
+    
+    const tour = [];
+    const stack = [0];
+    
+    while (stack.length > 0) {
+        const v = stack[stack.length - 1];
+        
+        if (adj[v].length > 0) {
+            const u = adj[v].pop();
+            // Remove reverse edge
+            const idx = adj[u].indexOf(v);
+            if (idx !== -1) {
+                adj[u].splice(idx, 1);
+            }
+            stack.push(u);
+        } else {
+            tour.push(stack.pop());
+        }
+    }
+    
+    return tour.reverse();
+}
+
+function shortcutToHamiltonian(eulerianTour) {
+    const visited = new Set();
+    const hamiltonianTour = [];
+    
+    for (const vertex of eulerianTour) {
+        if (!visited.has(vertex)) {
+            hamiltonianTour.push(vertex);
+            visited.add(vertex);
+        }
+    }
+    
+    return hamiltonianTour;
 }
 
 function computeFlow(D, P, L) {
@@ -859,6 +1862,52 @@ function constructTourFromD(D, L) {
     }
     
     return tour.map(index => foodSources[index]);
+}
+
+// === 2-OPT OPTIMIZATION ===
+function optimizeWith2Opt(tour) {
+    if (!tour || tour.length < 4) return tour;
+    
+    let improved = true;
+    let optimizedTour = [...tour];
+    let iterations = 0;
+    const maxIterations = 1000;
+    
+    while (improved && iterations < maxIterations) {
+        improved = false;
+        iterations++;
+        
+        for (let i = 0; i < optimizedTour.length - 1; i++) {
+            for (let j = i + 2; j < optimizedTour.length; j++) {
+                if (j === optimizedTour.length - 1 && i === 0) continue; // Skip if it would break the tour
+                
+                const currentDistance = 
+                    obstacleAwareDistance(optimizedTour[i], optimizedTour[i + 1]) +
+                    obstacleAwareDistance(optimizedTour[j], optimizedTour[(j + 1) % optimizedTour.length]);
+                
+                const newDistance = 
+                    obstacleAwareDistance(optimizedTour[i], optimizedTour[j]) +
+                    obstacleAwareDistance(optimizedTour[i + 1], optimizedTour[(j + 1) % optimizedTour.length]);
+                
+                if (newDistance < currentDistance) {
+                    // Perform 2-opt swap
+                    const newTour = [...optimizedTour];
+                    // Reverse the segment between i+1 and j
+                    let left = i + 1;
+                    let right = j;
+                    while (left < right) {
+                        [newTour[left], newTour[right]] = [newTour[right], newTour[left]];
+                        left++;
+                        right--;
+                    }
+                    optimizedTour = newTour;
+                    improved = true;
+                }
+            }
+        }
+    }
+    
+    return optimizedTour;
 }
 
 function optimizeWith2Opt(points) {
@@ -1456,6 +2505,52 @@ function catmullRomSpline(p0, p1, p2, p3, t) {
     );
 }
 
+function drawCatmullRomSpline(points) {
+    if (!points || points.length < 2) return;
+    
+    ctx.beginPath();
+    
+    if (points.length === 2) {
+        // Simple line for 2 points
+        ctx.moveTo(points[0].x, points[0].y);
+        ctx.lineTo(points[1].x, points[1].y);
+    } else {
+        // Catmull-Rom spline for 3+ points
+        const segments = 20; // Number of segments per curve section
+        
+        // Start at first point
+        ctx.moveTo(points[0].x, points[0].y);
+        
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = points[Math.max(0, i - 1)];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = points[Math.min(points.length - 1, i + 2)];
+            
+            for (let j = 0; j <= segments; j++) {
+                const t = j / segments;
+                const x = catmullRomSpline(p0.x, p1.x, p2.x, p3.x, t);
+                const y = catmullRomSpline(p0.y, p1.y, p2.y, p3.y, t);
+                
+                if (i === 0 && j === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+        }
+        
+        // Close the tour by connecting back to start
+        if (points.length > 2) {
+            const lastPoint = points[points.length - 1];
+            const firstPoint = points[0];
+            ctx.lineTo(firstPoint.x, firstPoint.y);
+        }
+    }
+    
+    ctx.stroke();
+}
+
 function drawObstacles() {
     if (PARAMS.obstacleSource === 'polygons') {
         ctx.fillStyle = 'rgba(255, 59, 48, 0.3)';
@@ -1529,6 +2624,7 @@ function clearObstacles() {
     currentPolygon = null;
     drawingPolygon = false;
     distCache.clear();
+    clearDistanceCache(); // Clear TSP distance cache
     if (grid) grid = buildGrid(mask, PARAMS.cellSize);
     drawStaticElements();
     
@@ -1641,6 +2737,7 @@ function loadScenario(scenario) {
         obstacles.push(...data.obstacles);
         
         distCache.clear();
+        clearDistanceCache(); // Clear TSP distance cache
         if (grid) grid = buildGrid(mask, PARAMS.cellSize);
         
         drawStaticElements();
@@ -1755,6 +2852,7 @@ canvas.addEventListener('dblclick', (event) => {
         currentPolygon = null;
         drawingPolygon = false;
         distCache.clear();
+        clearDistanceCache(); // Clear TSP distance cache
         if (grid) grid = buildGrid(mask, PARAMS.cellSize);
         drawStaticElements();
         
@@ -1937,6 +3035,25 @@ controls.importBgButton.addEventListener('click', () => controls.importBgFile.cl
 controls.importBgFile.addEventListener('change', handleImportBgFileSelect);
 controls.showBackground.addEventListener('change', handleShowBackgroundToggle);
 controls.bgOpacitySlider.addEventListener('input', () => { updateParams(); drawStaticElements(); });
+
+// TSP Optimizer Event Listeners
+const runSelectedOptimizerBtn = document.getElementById('runSelectedOptimizer');
+const runAllOptimizersBtn = document.getElementById('runAllOptimizers');
+const exportComparisonBtn = document.getElementById('exportComparisonBtn');
+const clearComparisonBtn = document.getElementById('clearComparisonBtn');
+
+if (runSelectedOptimizerBtn) {
+    runSelectedOptimizerBtn.addEventListener('click', handleRunSelectedOptimizer);
+}
+if (runAllOptimizersBtn) {
+    runAllOptimizersBtn.addEventListener('click', handleRunAllOptimizers);
+}
+if (exportComparisonBtn) {
+    exportComparisonBtn.addEventListener('click', handleExportComparison);
+}
+if (clearComparisonBtn) {
+    clearComparisonBtn.addEventListener('click', handleClearComparison);
+}
 
 // Polygon Drawing Event Listener
 const togglePolygonBtn = document.getElementById('togglePolygonDraw');

@@ -21,6 +21,7 @@
             <button class="tab-btn" data-tab="pointsTab">Points</button>
             <button class="tab-btn" data-tab="scenariosTab">Scenarios</button>
             <button class="tab-btn" data-tab="analysisTab">Analysis</button>
+            <button class="tab-btn" data-tab="comparisonTab">Comparison</button>
         </div>
         <div class="tab-content" id="controlsTab">
             <h3>Simulation Controls</h3>
@@ -52,6 +53,23 @@
                     <option value="tpsma">TPSMA</option>
                     <option value="astar">A* Pathfinding</option>
                 </select>
+            </div>
+
+            <div class="control-group">
+                <label>TSP Optimizer</label>
+                <select id="tspOptimizer">
+                    <option value="tpsma">TPSMA (flow+distance)</option>
+                    <option value="ga">Genetic Algorithm</option>
+                    <option value="christofides">Christofides</option>
+                </select>
+                <div class="button-group" style="margin-top: 8px;"> 
+                    <button id="runSelectedOptimizer">Run Selected</button> 
+                    <button id="runAllOptimizers">Run All</button> 
+                </div>
+                <div class="control-group"> 
+                    <input type="checkbox" id="animateOptimization" title="Show optimization animation"> 
+                    <label for="animateOptimization" class="checkbox-label">Animate</label> 
+                </div>
             </div>
 
             <div class="control-group">
@@ -295,6 +313,50 @@
                     Trail snapshots: 0<br>
                     Active agents: 0
                 </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="comparisonTab" style="display:none">
+            <h3>TSP Optimization Comparison</h3>
+            
+            <div class="control-group">
+                <label>Results Summary</label>
+                <div id="resultsPanel">
+                    <div id="optimizationStatus">No optimizations run yet</div>
+                    <table id="comparisonTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Optimizer</th>
+                                <th>Distance</th>
+                                <th>Time (ms)</th>
+                                <th>Improvements</th>
+                                <th>Seed</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comparisonTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Performance Charts</label>
+                <div id="chartsContainer">
+                    <div class="chart-section">
+                        <h4>Distance Comparison</h4>
+                        <canvas id="distanceChart" width="300" height="150"></canvas>
+                    </div>
+                    <div class="chart-section">
+                        <h4>Time Comparison</h4>
+                        <canvas id="timeChart" width="300" height="150"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button id="exportComparisonBtn">Export Comparison Data</button>
+                <button id="clearComparisonBtn">Clear Results</button>
             </div>
         </div>
     </div>
