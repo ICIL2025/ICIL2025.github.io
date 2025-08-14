@@ -1,21 +1,16 @@
 {
-  "name": "Biological Networks Inspiring Urban Connectivity",
-  "short_name": "PhysarumSim",
+  "name": "ICIL 2025 - In-Plant Logistics Simulation",
+  "short_name": "LogisticsSim",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#242424",
-  "theme_color": "#242424",
-  "description": "A slime mold (Physarum polycephalum) inspired simulation. Works offline and as a PWA.",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "description": "Advanced path optimization simulation with obstacle-aware navigation algorithms. Works offline as a PWA.",
   "icons": [
     {
-      "src": "index.icon.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "index.apple-touch-icon.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
     }
   ]
 }

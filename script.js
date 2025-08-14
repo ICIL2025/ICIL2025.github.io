@@ -128,12 +128,15 @@ class LogisticsSimulation {
             if (panel) {
                 const params = this.algorithmParams[alg];
                 panel.innerHTML = Object.entries(params)
-                    .map(([key, value]) => `
+                    .map(([key, value]) => {
+                        const inputType = typeof value === 'boolean' ? 'checkbox' : 'number';
+                        const inputValue = typeof value === 'boolean' ? (value ? 'checked' : '') : `value="${value}"`;
+                        return `
                         <div class="param-row">
                             <label>${key}</label>
-                            <input type="number" value="${value}" data-param="${key}" data-algorithm="${alg}">
+                            <input type="${inputType}" ${inputValue} data-param="${key}" data-algorithm="${alg}">
                         </div>
-                    `).join('');
+                    `}).join('');
             }
         });
     }
@@ -427,11 +430,32 @@ class LogisticsSimulation {
             }
         });
         
-        this.algorithmResults = results;
+        // Enhance results with comparative metrics
+        this.algorithmResults = this.enhanceAlgorithmResults(results, this.nodes);
+        
+        // Calculate improvement rates for iterative algorithms
+        this.calculateImprovementRates();
+        
         this.updateResultsDisplay();
         this.render();
         
-        this.showMessage('Algorithms completed!', 'success');
+        this.showMessage('Algorithms completed with enhanced metrics!', 'success');
+    }
+    
+    calculateImprovementRates() {
+        Object.keys(this.algorithmResults).forEach(algorithmName => {
+            const result = this.algorithmResults[algorithmName];
+            if (result.error) return;
+            
+            if (result.initialPathLength && result.totalLength) {
+                result.improvementRatePercent = this.calculateImprovementRatePercent(
+                    result.initialPathLength,
+                    result.totalLength
+                );
+            } else {
+                result.improvementRatePercent = null; // For Christofides
+            }
+        });
     }
     
     runSingleAlgorithm(algorithmName) {
@@ -477,6 +501,8 @@ class LogisticsSimulation {
         
         let bestTour = null;
         let bestLength = Infinity;
+        let totalIterations = 0;
+        let initialLength = null;
         
         // Multiple seeds for exploration
         for (let seed = 0; seed < params.seeds; seed++) {
@@ -493,11 +519,25 @@ class LogisticsSimulation {
                 }
             }
             
+            // Generate initial solution for this seed
+            const initialTour = this.generateInitialRandomTour(nodes, rng);
+            const seedInitialLength = this.calculateObstacleAwareTourLength(initialTour, nodes);
+            
+            if (initialLength === null) {
+                initialLength = seedInitialLength; // Use first seed's initial solution
+            }
+            
+            let seedBestTour = [...initialTour];
+            let seedBestLength = seedInitialLength;
+            
             // Simulate network evolution
             let prevBestLength = Infinity;
             let stagnationCount = 0;
+            let seedIterations = 0;
             
             for (let iter = 0; iter < params.iterations; iter++) {
+                seedIterations++;
+                
                 // Update conductances based on flow
                 this.updateSlimeMoldConductance(conductance, distMatrix, n);
                 
@@ -513,12 +553,19 @@ class LogisticsSimulation {
                     stagnationCount = 0;
                 }
                 
-                if (length < bestLength) {
-                    bestLength = length;
-                    bestTour = [...tour];
+                if (length < seedBestLength) {
+                    seedBestLength = length;
+                    seedBestTour = [...tour];
                 }
                 
                 prevBestLength = length;
+            }
+            
+            totalIterations += seedIterations;
+            
+            if (seedBestLength < bestLength) {
+                bestLength = seedBestLength;
+                bestTour = [...seedBestTour];
             }
         }
         
@@ -526,11 +573,15 @@ class LogisticsSimulation {
             path: bestTour,
             totalLength: bestLength,
             algorithm: 'TPSMA',
+            iterationCount: Math.round(totalIterations / params.seeds), // Average iterations per seed
+            initialPathLength: initialLength,
             details: { 
                 seeds: params.seeds, 
                 iterations: params.iterations,
                 bioinspired: true,
-                obstacleAware: true
+                obstacleAware: true,
+                averageIterations: Math.round(totalIterations / params.seeds),
+                totalIterations: totalIterations
             }
         };
     }
@@ -605,12 +656,19 @@ class LogisticsSimulation {
             population.push(individual);
         }
         
+        // Track initial solution
+        const initialSolution = [...population[0]];
+        const initialLength = this.calculateObstacleAwareTourLength(initialSolution, nodes);
+        
         let bestIndividual = null;
         let bestFitness = Infinity;
         let generation = 0;
         let stagnationCount = 0;
+        let actualIterations = 0;
         
         while (generation < params.generations && stagnationCount < 50) {
+            actualIterations++;
+            
             // Evaluate fitness
             const fitness = population.map(ind => this.calculateObstacleAwareTourLength(ind, nodes));
             
@@ -655,11 +713,14 @@ class LogisticsSimulation {
             path: bestIndividual,
             totalLength: bestFitness,
             algorithm: 'GA',
+            iterationCount: actualIterations,
+            initialPathLength: initialLength,
             details: { 
                 generations: generation,
                 population: params.populationSize,
                 finalStagnation: stagnationCount,
-                obstacleAware: true
+                obstacleAware: true,
+                actualGenerations: actualIterations
             }
         };
     }
@@ -767,12 +828,15 @@ class LogisticsSimulation {
             path: hamiltonian,
             totalLength: totalLength,
             algorithm: 'Christofides',
+            iterationCount: null, // Non-iterative algorithm
+            initialPathLength: null, // Deterministic algorithm
             details: { 
                 mstEdges: mst.length,
                 oddVertices: oddVertices.length,
                 matchingEdges: matching.length,
                 approximationRatio: 1.5,
-                obstacleAware: true
+                obstacleAware: true,
+                deterministic: true
             }
         };
     }
@@ -986,6 +1050,110 @@ class LogisticsSimulation {
     }
     
     // =============================================================================
+    // ENHANCED METRICS CALCULATION
+    // =============================================================================
+    
+    calculatePathOptimalityPercent(algorithmLength, shortestLength) {
+        if (shortestLength <= 0) return 100;
+        return Math.round((shortestLength / algorithmLength) * 100 * 100) / 100;
+    }
+    
+    calculateComputationSpeed(pathLength, runtime) {
+        if (runtime <= 0) return 0;
+        return Math.round((pathLength / runtime) * 100) / 100;
+    }
+    
+    calculateImprovementRatePercent(initialLength, finalLength) {
+        if (initialLength <= 0) return 0;
+        return Math.round(((initialLength - finalLength) / initialLength) * 100 * 100) / 100;
+    }
+    
+    calculatePathSmoothnessTurns(path, nodes) {
+        if (path.length < 3) return 0;
+        
+        let turns = 0;
+        const angleThreshold = 10; // Degrees - angles smaller than this are considered straight
+        
+        // Include the closing segment for tour calculations
+        const fullPath = [...path, path[0]];
+        
+        for (let i = 1; i < fullPath.length - 1; i++) {
+            const prevNode = nodes[fullPath[i - 1]];
+            const currentNode = nodes[fullPath[i]];
+            const nextNode = nodes[fullPath[i + 1]];
+            
+            if (!prevNode || !currentNode || !nextNode) continue;
+            
+            const angle = this.calculateAngleBetweenPoints(prevNode, currentNode, nextNode);
+            const angleDegrees = Math.abs(angle * 180 / Math.PI);
+            
+            // Count as turn if angle is significantly different from 0° or 180°
+            if (angleDegrees > angleThreshold && angleDegrees < (180 - angleThreshold)) {
+                turns++;
+            }
+        }
+        
+        return turns;
+    }
+    
+    calculateAngleBetweenPoints(p1, p2, p3) {
+        const v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+        const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+        
+        const dotProduct = v1.x * v2.x + v1.y * v2.y;
+        const magnitude1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+        const magnitude2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+        
+        if (magnitude1 === 0 || magnitude2 === 0) return 0;
+        
+        const cosAngle = dotProduct / (magnitude1 * magnitude2);
+        return Math.acos(Math.max(-1, Math.min(1, cosAngle))); // Clamp to [-1, 1] for safety
+    }
+    
+    generateInitialRandomTour(nodes, rng) {
+        const tour = Array.from({length: nodes.length}, (_, i) => i);
+        this.shuffleArray(tour, rng);
+        return tour;
+    }
+    
+    enhanceAlgorithmResults(results, nodes) {
+        // Calculate shortest path length for optimality comparison
+        const lengths = Object.values(results)
+            .filter(r => r.totalLength && !r.error)
+            .map(r => r.totalLength);
+        
+        const shortestLength = Math.min(...lengths);
+        
+        // Enhance each algorithm's results
+        Object.keys(results).forEach(algorithmName => {
+            const result = results[algorithmName];
+            if (result.error) return;
+            
+            // Add enhanced metrics
+            result.pathOptimalityPercent = this.calculatePathOptimalityPercent(
+                result.totalLength, 
+                shortestLength
+            );
+            
+            result.computationSpeedPxPerMs = this.calculateComputationSpeed(
+                result.totalLength, 
+                result.time
+            );
+            
+            result.pathSmoothnessTurns = this.calculatePathSmoothnessTurns(
+                result.path, 
+                nodes
+            );
+            
+            // Rename for consistency
+            result.pathLength = result.totalLength;
+            result.runtime = result.time;
+        });
+        
+        return results;
+    }
+    
+    // =============================================================================
     // COORDINATE SYSTEM VALIDATION
     // =============================================================================
     
@@ -1185,7 +1353,7 @@ class LogisticsSimulation {
         if (!resultsPanel) return;
         
         if (Object.keys(this.algorithmResults).length === 0) {
-            resultsPanel.innerHTML = '<p class="no-results">No results yet. Run algorithms to see comparison.</p>';
+            resultsPanel.innerHTML = '<p class="no-results">No results yet. Run algorithms to see enhanced metrics comparison.</p>';
             return;
         }
         
@@ -1206,14 +1374,42 @@ class LogisticsSimulation {
                         `<p class="error">Error: ${result.error}</p>` :
                         `
                         <div class="result-stats">
-                            <div class="stat">
-                                <label>Path Length:</label>
-                                <span>${result.totalLength.toFixed(1)} px</span>
+                            <div class="stat-section">
+                                <h5>Path Metrics</h5>
+                                <div class="stat">
+                                    <label>Path Length:</label>
+                                    <span>${(result.totalLength || 0).toFixed(1)} px</span>
+                                </div>
+                                <div class="stat">
+                                    <label>Optimality:</label>
+                                    <span>${(result.pathOptimalityPercent !== undefined && result.pathOptimalityPercent !== null) ? result.pathOptimalityPercent.toFixed(1) + '%' : 'N/A'}</span>
+                                </div>
+                                <div class="stat">
+                                    <label>Smoothness (Turns):</label>
+                                    <span>${(result.pathSmoothnessTurns !== undefined && result.pathSmoothnessTurns !== null) ? result.pathSmoothnessTurns : 'N/A'}</span>
+                                </div>
                             </div>
-                            <div class="stat">
-                                <label>Runtime:</label>
-                                <span>${result.time.toFixed(2)} ms</span>
+                            
+                            <div class="stat-section">
+                                <h5>Performance Metrics</h5>
+                                <div class="stat">
+                                    <label>Runtime:</label>
+                                    <span>${(result.time || 0).toFixed(2)} ms</span>
+                                </div>
+                                <div class="stat">
+                                    <label>Speed:</label>
+                                    <span>${(result.computationSpeedPxPerMs !== undefined && result.computationSpeedPxPerMs !== null) ? result.computationSpeedPxPerMs.toFixed(2) + ' px/ms' : 'N/A'}</span>
+                                </div>
+                                <div class="stat">
+                                    <label>Iterations:</label>
+                                    <span>${(result.iterationCount !== undefined && result.iterationCount !== null) ? result.iterationCount : 'N/A'}</span>
+                                </div>
+                                <div class="stat">
+                                    <label>Improvement:</label>
+                                    <span>${(result.improvementRatePercent !== undefined && result.improvementRatePercent !== null) ? result.improvementRatePercent.toFixed(1) + '%' : 'N/A'}</span>
+                                </div>
                             </div>
+                            
                             <div class="stat">
                                 <label>Path:</label>
                                 <span class="path-display">[${result.path.join(' → ')}]</span>
@@ -1254,12 +1450,21 @@ class LogisticsSimulation {
     // =============================================================================
     
     exportScenario() {
+        // Create enhanced export data
         const scenario = {
-            nodes: this.nodes,
-            obstacles: this.obstacles,
-            parameters: this.algorithmParams,
-            timestamp: new Date().toISOString(),
-            version: '1.0'
+            metadata: {
+                timestamp: new Date().toISOString(),
+                version: '2.0',
+                nodeCount: this.nodes.length,
+                obstacleCount: this.obstacles.length,
+                hasResults: Object.keys(this.algorithmResults).length > 0
+            },
+            scenario: {
+                nodes: this.nodes,
+                obstacles: this.obstacles,
+                parameters: this.algorithmParams
+            },
+            results: this.prepareResultsForExport()
         };
         
         const blob = new Blob([JSON.stringify(scenario, null, 2)], {
@@ -1269,11 +1474,47 @@ class LogisticsSimulation {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `logistics-scenario-${Date.now()}.json`;
+        a.download = `logistics-enhanced-${Date.now()}.json`;
         a.click();
         
         URL.revokeObjectURL(url);
-        this.showMessage('Scenario exported successfully!', 'success');
+        this.showMessage('Enhanced scenario with metrics exported successfully!', 'success');
+    }
+    
+    prepareResultsForExport() {
+        if (Object.keys(this.algorithmResults).length === 0) {
+            return null;
+        }
+        
+        const exportResults = {};
+        
+        Object.keys(this.algorithmResults).forEach(algorithmName => {
+            const result = this.algorithmResults[algorithmName];
+            if (result.error) {
+                exportResults[algorithmName] = { error: result.error };
+                return;
+            }
+            
+            exportResults[algorithmName] = {
+                // Primary metrics
+                pathLength: result.pathLength || result.totalLength,
+                runtime: result.runtime || result.time,
+                path: result.path,
+                
+                // Enhanced metrics
+                pathOptimalityPercent: result.pathOptimalityPercent,
+                iterationCount: result.iterationCount,
+                computationSpeedPxPerMs: result.computationSpeedPxPerMs,
+                improvementRatePercent: result.improvementRatePercent,
+                pathSmoothnessTurns: result.pathSmoothnessTurns,
+                
+                // Algorithm details
+                algorithm: result.algorithm,
+                details: result.details
+            };
+        });
+        
+        return exportResults;
     }
     
     importScenario(file) {
@@ -1616,7 +1857,13 @@ function setupParameterHandlers() {
         if (e.target.dataset.param && e.target.dataset.algorithm) {
             const algorithm = e.target.dataset.algorithm;
             const param = e.target.dataset.param;
-            const value = parseFloat(e.target.value) || 0;
+            let value;
+            
+            if (e.target.type === 'checkbox') {
+                value = e.target.checked;
+            } else {
+                value = parseFloat(e.target.value) || 0;
+            }
             
             simulation.algorithmParams[algorithm][param] = value;
             simulation.clearResults();
