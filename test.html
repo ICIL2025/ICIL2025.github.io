@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Algorithms Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: rgba(0,0,0,0.2);
+        }
+        
+        button {
+            background: linear-gradient(145deg, #0f3460, #1a5490);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: linear-gradient(145deg, #1a5490, #0f3460);
+            box-shadow: 0 4px 15px rgba(26, 84, 144, 0.4);
+        }
+        
+        pre {
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0,100,0,0.2);
+            border-radius: 5px;
+        }
+        
+        .error {
+            background: rgba(100,0,0,0.2);
+        }
+        
+        canvas {
+            border: 2px solid #333;
+            background: rgba(255,255,255,0.1);
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Enhanced Algorithms Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>Linear Solver Test</h2>
+        <p>Test the ml-matrix based linear system solver</p>
+        <button onclick="testLinearSolver()">Test Linear Solver</button>
+        <div id="linearResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Perfect Matching Test</h2>
+        <p>Test the edmonds-blossom based minimum weight perfect matching</p>
+        <button onclick="testMatching()">Test Matching</button>
+        <div id="matchingResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Geometry Test</h2>
+        <p>Test robust geometric predicates and spatial indexing</p>
+        <button onclick="testGeometry()">Test Geometry</button>
+        <div id="geometryResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>TSP Algorithms Test</h2>
+        <p>Test enhanced TPSMA and Christofides algorithms</p>
+        <button onclick="testTPSMA()">Test Enhanced TPSMA</button>
+        <button onclick="testChristofides()">Test Enhanced Christofides</button>
+        <div id="tspResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Visual TSP Demo</h2>
+        <canvas id="tspCanvas" width="400" height="300"></canvas>
+        <br>
+        <button onclick="generateRandomPoints()">Generate Points</button>
+        <button onclick="runVisualTSP()">Solve TSP</button>
+        <div id="visualResult"></div>
+    </div>
+    
+    <script type="module">
+        // Import enhanced modules for testing
+        import { solveLinearSystem } from './src/numerics/linearSolver.js'
+        import { minWeightPerfectMatching } from './src/algos/matching.js'
+        import { segmentsIntersect, pointInPolygon, clipPolygons } from './src/geom/robust.js'
+        import { buildIndex, queryIndex } from './src/geom/index2d.js'
+        import { solveTPSMA } from './src/algos/tpsma-wrapper.js'
+        import { christofides } from './src/algos/christofides.js'
+        import EnhancedTSP from './src/enhanced.js'
+        
+        // Global variables for demo
+        let testPoints = []
+        let enhancedTSP = new EnhancedTSP()
+        
+        // Test functions
+        window.testLinearSolver = async function() {
+            const resultDiv = document.getElementById('linearResult')
+            try {
+                // Test system: 2x + y = 1, x + 3y = 2
+                const A = [[2, 1], [1, 3]]
+                const b = [1, 2]
+                const result = solveLinearSystem(A, b)
+                const solution = Array.isArray(result) ? result : result.to1DArray()
+                
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <strong>Success!</strong><br>
+                        System: 2x + y = 1, x + 3y = 2<br>
+                        Solution: x = ${solution[0].toFixed(4)}, y = ${solution[1].toFixed(4)}<br>
+                        <pre>${JSON.stringify({A, b, solution}, null, 2)}</pre>
+                    </div>
+                `
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error"><strong>Error:</strong> ${error.message}</div>`
+            }
+        }
+        
+        window.testMatching = async function() {
+            const resultDiv = document.getElementById('matchingResult')
+            try {
+                const vertices = [0, 1, 2, 3]
+                const distances = {
+                    '0-1': 1, '0-2': 4, '0-3': 3,
+                    '1-2': 2, '1-3': 5, '2-3': 1
+                }
+                const matching = minWeightPerfectMatching(vertices, distances)
+                
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <strong>Success!</strong><br>
+                        Vertices: ${vertices.join(', ')}<br>
+                        Matching: ${JSON.stringify(matching)}<br>
+                        <pre>${JSON.stringify({vertices, distances, matching}, null, 2)}</pre>
+                    </div>
+                `
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error"><strong>Error:</strong> ${error.message}</div>`
+            }
+        }
+        
+        window.testGeometry = async function() {
+            const resultDiv = document.getElementById('geometryResult')
+            try {
+                // Test point in polygon
+                const point = [1, 1]
+                const polygon = [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]
+                const inside = pointInPolygon(point, polygon)
+                
+                // Test segment intersection
+                const seg1 = [0, 0, 2, 2]
+                const seg2 = [0, 2, 2, 0]
+                const intersect = segmentsIntersect(seg1, seg2)
+                
+                // Test spatial index
+                const items = [
+                    {minX: 0, minY: 0, maxX: 1, maxY: 1, id: 'a'},
+                    {minX: 1, minY: 1, maxX: 2, maxY: 2, id: 'b'}
+                ]
+                const index = buildIndex(items)
+                const query = queryIndex(index, {minX: 0.5, minY: 0.5, maxX: 1.5, maxY: 1.5})
+                
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <strong>Success!</strong><br>
+                        Point ${JSON.stringify(point)} in polygon: ${inside}<br>
+                        Segments intersect: ${intersect}<br>
+                        Spatial query result: ${query.length} items<br>
+                        <pre>${JSON.stringify({point, polygon, inside, intersect, queryResults: query}, null, 2)}</pre>
+                    </div>
+                `
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error"><strong>Error:</strong> ${error.message}</div>`
+            }
+        }
+        
+        window.testTPSMA = async function() {
+            const resultDiv = document.getElementById('tspResult')
+            try {
+                const positions = [
+                    {x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}, {x: 0, y: 1}
+                ]
+                const result = solveTPSMA(positions)
+                
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <strong>TPSMA Success!</strong><br>
+                        Algorithm: ${result.algorithm}<br>
+                        Route: ${result.route.join(' → ')}<br>
+                        Distance: ${result.distance.toFixed(4)}<br>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error"><strong>TPSMA Error:</strong> ${error.message}</div>`
+            }
+        }
+        
+        window.testChristofides = async function() {
+            const resultDiv = document.getElementById('tspResult')
+            try {
+                const positions = [
+                    {x: 0, y: 0}, {x: 2, y: 0}, {x: 2, y: 2}, {x: 0, y: 2}
+                ]
+                const result = christofides(positions)
+                
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <strong>Christofides Success!</strong><br>
+                        Algorithm: ${result.algorithm}<br>
+                        Route: ${result.route.join(' → ')}<br>
+                        Distance: ${result.distance.toFixed(4)}<br>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error"><strong>Christofides Error:</strong> ${error.message}</div>`
+            }
+        }
+        
+        window.generateRandomPoints = function() {
+            const canvas = document.getElementById('tspCanvas')
+            const ctx = canvas.getContext('2d')
+            
+            testPoints = []
+            for (let i = 0; i < 8; i++) {
+                testPoints.push({
+                    x: 20 + Math.random() * 360,
+                    y: 20 + Math.random() * 260
+                })
+            }
+            
+            // Clear and draw points
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.fillStyle = '#4CAF50'
+            for (let i = 0; i < testPoints.length; i++) {
+                const p = testPoints[i]
+                ctx.beginPath()
+                ctx.arc(p.x, p.y, 6, 0, 2 * Math.PI)
+                ctx.fill()
+                
+                ctx.fillStyle = '#FFF'
+                ctx.font = '12px Arial'
+                ctx.fillText(i.toString(), p.x - 3, p.y + 4)
+                ctx.fillStyle = '#4CAF50'
+            }
+        }
+        
+        window.runVisualTSP = async function() {
+            if (testPoints.length === 0) {
+                document.getElementById('visualResult').innerHTML = 
+                    '<div class="result error">Generate points first!</div>'
+                return
+            }
+            
+            const canvas = document.getElementById('tspCanvas')
+            const ctx = canvas.getContext('2d')
+            const resultDiv = document.getElementById('visualResult')
+            
+            try {
+                // Test both algorithms
+                const tpsmaResult = enhancedTSP.solveTSP_TPSMA(testPoints)
+                const christofidesResult = enhancedTSP.solveTSP_Christofides(testPoints)
+                
+                // Draw TPSMA solution
+                ctx.strokeStyle = '#FF5722'
+                ctx.lineWidth = 2
+                ctx.beginPath()
+                for (let i = 0; i < tpsmaResult.route.length; i++) {
+                    const idx = tpsmaResult.route[i]
+                    const p = testPoints[idx]
+                    if (i === 0) ctx.moveTo(p.x, p.y)
+                    else ctx.lineTo(p.x, p.y)
+                }
+                // Close tour
+                const first = testPoints[tpsmaResult.route[0]]
+                ctx.lineTo(first.x, first.y)
+                ctx.stroke()
+                
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <strong>Visual TSP Results:</strong><br>
+                        <span style="color: #FF5722">■</span> TPSMA: Distance ${tpsmaResult.distance.toFixed(2)}<br>
+                        Christofides: Distance ${christofidesResult.distance.toFixed(2)}<br>
+                        Points: ${testPoints.length}<br>
+                    </div>
+                `
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error"><strong>Visual TSP Error:</strong> ${error.message}</div>`
+            }
+        }
+        
+        // Initialize with some points
+        setTimeout(() => {
+            generateRandomPoints()
+        }, 500)
+    </script>
+</body>
+</html>

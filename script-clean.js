@@ -96,24 +96,6 @@ class LogisticsSimulation {
             select: 'default'
         };
         this.canvas.style.cursor = cursors[this.currentTool] || 'default';
-        
-        // Update tool indicator
-        const indicators = {
-            node: '📍 Click to add nodes',
-            select: '👆 Click to select and drag nodes',
-            obstacle: '🚧 Click to draw polygon obstacles (Enter to finish)'
-        };
-        
-        const indicator = document.getElementById('toolIndicator');
-        if (indicator) {
-            indicator.textContent = indicators[this.currentTool] || 'Select a tool';
-        }
-        
-        // Update status text
-        const statusText = document.getElementById('statusText');
-        if (statusText) {
-            statusText.textContent = `${this.currentTool.charAt(0).toUpperCase() + this.currentTool.slice(1)} mode active - ${indicators[this.currentTool] || 'Ready'}`;
-        }
     }
     
     updateParameterPanels() {
@@ -1080,18 +1062,6 @@ class LogisticsSimulation {
         
         // Draw nodes
         this.drawNodes();
-        
-        // Update UI counters
-        this.updateUICounters();
-    }
-    
-    updateUICounters() {
-        // Update node and obstacle counts
-        const nodeCountEl = document.getElementById('nodeCount');
-        const obstacleCountEl = document.getElementById('obstacleCount');
-        
-        if (nodeCountEl) nodeCountEl.textContent = this.nodes.length;
-        if (obstacleCountEl) obstacleCountEl.textContent = this.obstacles.length;
     }
     
     drawGrid() {

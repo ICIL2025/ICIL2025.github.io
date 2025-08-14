@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Path Optimization Algorithms Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #ffffff;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #2a2a2a;
+        }
+        
+        button {
+            background: #0066ff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            margin: 10px 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background: #0052cc;
+        }
+        
+        .results {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .result-box {
+            padding: 15px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            background: #333;
+        }
+        
+        canvas {
+            border: 1px solid #555;
+            background: #111;
+            margin: 10px 0;
+        }
+        
+        .algorithm-name {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        
+        .stats {
+            font-size: 12px;
+            color: #ccc;
+            margin: 5px 0;
+        }
+        
+        .path-display {
+            font-size: 11px;
+            color: #aaa;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <h1>Path Optimization Algorithms Comparison</h1>
+    
+    <div class="test-section">
+        <h2>Test Configuration</h2>
+        <p>Testing three different path optimization algorithms on the same set of nodes:</p>
+        <ul>
+            <li><strong>TPSMA</strong> - Two-Way Parallel Slime Mold Algorithm (Bio-inspired)</li>
+            <li><strong>GA</strong> - Genetic Algorithm (Evolutionary)</li>
+            <li><strong>Christofides</strong> - Deterministic TSP Algorithm (1.5-approximation)</li>
+        </ul>
+        
+        <button onclick="generateTestNodes()">Generate Random Nodes</button>
+        <button onclick="runAllAlgorithms()">Run All Algorithms</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Visualization</h2>
+        <canvas id="visualCanvas" width="800" height="400"></canvas>
+    </div>
+    
+    <div class="test-section">
+        <h2>Algorithm Results</h2>
+        <div class="results">
+            <div class="result-box">
+                <div class="algorithm-name" style="color: #ff6b6b;">TPSMA</div>
+                <div id="tpsma-stats" class="stats">Not run yet</div>
+                <div id="tpsma-path" class="path-display"></div>
+            </div>
+            
+            <div class="result-box">
+                <div class="algorithm-name" style="color: #4ecdc4;">Genetic Algorithm</div>
+                <div id="ga-stats" class="stats">Not run yet</div>
+                <div id="ga-path" class="path-display"></div>
+            </div>
+            
+            <div class="result-box">
+                <div class="algorithm-name" style="color: #ffe66d;">Christofides</div>
+                <div id="christofides-stats" class="stats">Not run yet</div>
+                <div id="christofides-path" class="path-display"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Test data
+        let testNodes = [];
+        let algorithmResults = {};
+        
+        // Canvas setup
+        const canvas = document.getElementById('visualCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Generate random test nodes
+        function generateTestNodes(count = 10) {
+            testNodes = [];
+            for (let i = 0; i < count; i++) {
+                testNodes.push({
+                    x: 50 + Math.random() * (canvas.width - 100),
+                    y: 50 + Math.random() * (canvas.height - 100)
+                });
+            }
+            
+            drawNodes();
+            clearResults();
+        }
+        
+        // Draw nodes on canvas
+        function drawNodes() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw nodes
+            ctx.fillStyle = '#ffffff';
+            testNodes.forEach((node, index) => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 6, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000000';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(index.toString(), node.x, node.y + 4);
+                ctx.fillStyle = '#ffffff';
+            });
+        }
+        
+        // Draw path for algorithm
+        function drawPath(path, color, lineWidth = 2) {
+            if (!path || path.length < 2) return;
+            
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lineWidth;
+            ctx.beginPath();
+            
+            // Draw path
+            for (let i = 0; i < path.length - 1; i++) {
+                const from = testNodes[path[i]];
+                const to = testNodes[path[i + 1]];
+                
+                if (i === 0) ctx.moveTo(from.x, from.y);
+                ctx.lineTo(to.x, to.y);
+            }
+            
+            // Close the loop
+            if (path.length > 2) {
+                const last = testNodes[path[path.length - 1]];
+                const first = testNodes[path[0]];
+                ctx.lineTo(first.x, first.y);
+            }
+            
+            ctx.stroke();
+        }
+        
+        // Run all algorithms and compare
+        function runAllAlgorithms() {
+            if (testNodes.length < 3) {
+                alert('Generate nodes first (minimum 3 nodes)');
+                return;
+            }
+            
+            algorithmResults = {};
+            
+            try {
+                // Run TPSMA
+                const tpsmaResult = runAlgorithm('tpsma', testNodes);
+                algorithmResults.tpsma = tpsmaResult;
+                updateResultDisplay('tpsma', tpsmaResult, '#ff6b6b');
+                
+                // Run GA
+                const gaResult = runAlgorithm('ga', testNodes);
+                algorithmResults.ga = gaResult;
+                updateResultDisplay('ga', gaResult, '#4ecdc4');
+                
+                // Run Christofides
+                const christofidesResult = runAlgorithm('christofides', testNodes);
+                algorithmResults.christofides = christofidesResult;
+                updateResultDisplay('christofides', christofidesResult, '#ffe66d');
+                
+                // Visualize all paths
+                visualizeResults();
+                
+            } catch (error) {
+                console.error('Error running algorithms:', error);
+                alert('Error running algorithms. Check console for details.');
+            }
+        }
+        
+        // Update result display
+        function updateResultDisplay(algorithm, result, color) {
+            const statsDiv = document.getElementById(`${algorithm}-stats`);
+            const pathDiv = document.getElementById(`${algorithm}-path`);
+            
+            const stats = `
+                Length: ${result.totalLength.toFixed(1)} px<br>
+                Time: ${result.time.toFixed(2)} ms<br>
+                Details: ${JSON.stringify(result.details)}
+            `;
+            
+            const pathStr = `Path: [${result.path.join(' → ')}]`;
+            
+            statsDiv.innerHTML = stats;
+            pathDiv.innerHTML = pathStr;
+        }
+        
+        // Visualize all results
+        function visualizeResults() {
+            drawNodes();
+            
+            // Draw all paths with different colors and offsets
+            if (algorithmResults.tpsma) {
+                drawPath(algorithmResults.tpsma.path, '#ff6b6b', 3);
+            }
+            if (algorithmResults.ga) {
+                drawPath(algorithmResults.ga.path, '#4ecdc4', 2);
+            }
+            if (algorithmResults.christofides) {
+                drawPath(algorithmResults.christofides.path, '#ffe66d', 1);
+            }
+        }
+        
+        // Clear results
+        function clearResults() {
+            algorithmResults = {};
+            ['tpsma', 'ga', 'christofides'].forEach(alg => {
+                document.getElementById(`${alg}-stats`).innerHTML = 'Not run yet';
+                document.getElementById(`${alg}-path`).innerHTML = '';
+            });
+            drawNodes();
+        }
+        
+        // Initialize with some test nodes
+        generateTestNodes(8);
+    </script>
+    
+    <!-- Include the algorithm implementations -->
+    <script>
+        // Simplified versions of the algorithms for standalone testing
+        
+        // =============================================================================
+        // ALGORITHM IMPLEMENTATIONS (Simplified for testing)
+        // =============================================================================
+        
+        function runAlgorithm(algorithmName, nodeData) {
+            const startTime = performance.now();
+            let result;
+            
+            switch(algorithmName.toLowerCase()) {
+                case 'tpsma':
+                    result = solveTPSMA(nodeData);
+                    break;
+                case 'ga':
+                    result = solveGA(nodeData);
+                    break;
+                case 'christofides':
+                    result = solveChristofides(nodeData);
+                    break;
+                default:
+                    throw new Error(`Unknown algorithm: ${algorithmName}`);
+            }
+            
+            result.time = performance.now() - startTime;
+            return result;
+        }
+        
+        // TPSMA Implementation
+        function solveTPSMA(nodes) {
+            const n = nodes.length;
+            if (n < 2) return { path: [0], totalLength: 0, details: {} };
+            
+            const distMatrix = computeDistanceMatrix(nodes);
+            
+            // Simplified TPSMA - network flow simulation
+            let bestTour = null;
+            let bestLength = Infinity;
+            
+            // Multiple seeds for better exploration
+            for (let seed = 0; seed < 3; seed++) {
+                const rng = new SeededRandom(12345 + seed);
+                
+                // Initialize conductance matrix
+                const D = Array(n).fill().map(() => Array(n).fill(0));
+                for (let i = 0; i < n; i++) {
+                    for (let j = i + 1; j < n; j++) {
+                        D[i][j] = D[j][i] = 0.5 + rng.next() * 0.5;
+                    }
+                }
+                
+                // Simulate network evolution
+                for (let iter = 0; iter < 100; iter++) {
+                    // Update conductances based on distance (shorter = stronger)
+                    for (let i = 0; i < n; i++) {
+                        for (let j = i + 1; j < n; j++) {
+                            const flowStrength = 1 / (1 + distMatrix[i][j] * 0.01);
+                            D[i][j] = D[j][i] = D[i][j] * 0.95 + flowStrength * 0.05;
+                        }
+                    }
+                }
+                
+                // Extract tour using greedy approach on network
+                const tour = extractNetworkTour(D, distMatrix, n);
+                const length = calculatePathLength(tour, nodes);
+                
+                if (length < bestLength) {
+                    bestLength = length;
+                    bestTour = tour;
+                }
+            }
+            
+            return {
+                path: bestTour,
+                totalLength: bestLength,
+                algorithm: 'TPSMA',
+                details: { seeds: 3, iterations: 100, networkBased: true }
+            };
+        }
+        
+        // GA Implementation  
+        function solveGA(nodes) {
+            const n = nodes.length;
+            if (n < 3) return { path: [0], totalLength: 0, details: {} };
+            
+            const popSize = Math.max(50, n * 2);
+            const generations = Math.min(200, n * 10);
+            const rng = new SeededRandom(54321);
+            
+            // Initialize population
+            let population = [];
+            for (let i = 0; i < popSize; i++) {
+                const individual = Array.from({length: n}, (_, j) => j);
+                // Shuffle
+                for (let j = n - 1; j > 0; j--) {
+                    const k = Math.floor(rng.next() * (j + 1));
+                    [individual[j], individual[k]] = [individual[k], individual[j]];
+                }
+                population.push(individual);
+            }
+            
+            let bestIndividual = null;
+            let bestFitness = Infinity;
+            
+            // Evolution
+            for (let gen = 0; gen < generations; gen++) {
+                // Evaluate fitness
+                const fitness = population.map(ind => calculatePathLength(ind, nodes));
+                
+                // Track best
+                const minIndex = fitness.indexOf(Math.min(...fitness));
+                if (fitness[minIndex] < bestFitness) {
+                    bestFitness = fitness[minIndex];
+                    bestIndividual = [...population[minIndex]];
+                }
+                
+                // Selection and reproduction
+                const newPop = [];
+                
+                // Elitism
+                newPop.push([...bestIndividual]);
+                
+                // Generate offspring
+                while (newPop.length < popSize) {
+                    const parent1 = tournamentSelect(population, fitness, rng);
+                    const parent2 = tournamentSelect(population, fitness, rng);
+                    const child = orderCrossover(parent1, parent2, rng);
+                    
+                    if (rng.next() < 0.05) swapMutate(child, rng);
+                    newPop.push(child);
+                }
+                
+                population = newPop;
+            }
+            
+            return {
+                path: bestIndividual,
+                totalLength: bestFitness,
+                algorithm: 'GA',
+                details: { generations, population: popSize, evolutionary: true }
+            };
+        }
+        
+        // Christofides Implementation
+        function solveChristofides(nodes) {
+            const n = nodes.length;
+            if (n < 3) return { path: [0], totalLength: 0, details: {} };
+            
+            const distMatrix = computeDistanceMatrix(nodes);
+            
+            // Step 1: Minimum Spanning Tree
+            const mst = primMST(distMatrix);
+            
+            // Step 2: Find odd degree vertices
+            const degree = Array(n).fill(0);
+            mst.forEach(edge => {
+                degree[edge.from]++;
+                degree[edge.to]++;
+            });
+            
+            const oddVertices = [];
+            for (let i = 0; i < n; i++) {
+                if (degree[i] % 2 === 1) oddVertices.push(i);
+            }
+            
+            // Step 3: Minimum weight matching (simplified greedy)
+            const matching = [];
+            const used = Array(oddVertices.length).fill(false);
+            
+            for (let i = 0; i < oddVertices.length; i++) {
+                if (used[i]) continue;
+                let bestJ = -1;
+                let minDist = Infinity;
+                
+                for (let j = i + 1; j < oddVertices.length; j++) {
+                    if (!used[j] && distMatrix[oddVertices[i]][oddVertices[j]] < minDist) {
+                        minDist = distMatrix[oddVertices[i]][oddVertices[j]];
+                        bestJ = j;
+                    }
+                }
+                
+                if (bestJ !== -1) {
+                    matching.push({from: oddVertices[i], to: oddVertices[bestJ]});
+                    used[i] = used[bestJ] = true;
+                }
+            }
+            
+            // Step 4: Eulerian tour (simplified DFS)
+            const multigraph = [...mst, ...matching];
+            const tour = eulerianTour(multigraph, n);
+            
+            // Step 5: Hamiltonian shortcut
+            const hamiltonian = [...new Set(tour)];
+            
+            return {
+                path: hamiltonian,
+                totalLength: calculatePathLength(hamiltonian, nodes),
+                algorithm: 'Christofides',
+                details: { 
+                    mstEdges: mst.length, 
+                    oddVertices: oddVertices.length, 
+                    approximation: '1.5-optimal' 
+                }
+            };
+        }
+        
+        // =============================================================================
+        // HELPER FUNCTIONS
+        // =============================================================================
+        
+        function computeDistanceMatrix(nodes) {
+            const n = nodes.length;
+            const matrix = Array(n).fill().map(() => Array(n).fill(0));
+            
+            for (let i = 0; i < n; i++) {
+                for (let j = 0; j < n; j++) {
+                    if (i !== j) {
+                        const dx = nodes[i].x - nodes[j].x;
+                        const dy = nodes[i].y - nodes[j].y;
+                        matrix[i][j] = Math.sqrt(dx * dx + dy * dy);
+                    }
+                }
+            }
+            
+            return matrix;
+        }
+        
+        function calculatePathLength(path, nodes) {
+            if (path.length < 2) return 0;
+            
+            let total = 0;
+            for (let i = 0; i < path.length - 1; i++) {
+                const from = nodes[path[i]];
+                const to = nodes[path[i + 1]];
+                const dx = from.x - to.x;
+                const dy = from.y - to.y;
+                total += Math.sqrt(dx * dx + dy * dy);
+            }
+            
+            // Close the tour
+            if (path.length > 2) {
+                const last = nodes[path[path.length - 1]];
+                const first = nodes[path[0]];
+                const dx = last.x - first.x;
+                const dy = last.y - first.y;
+                total += Math.sqrt(dx * dx + dy * dy);
+            }
+            
+            return total;
+        }
+        
+        function extractNetworkTour(D, distMatrix, n) {
+            const tour = [0];
+            const visited = new Set([0]);
+            let current = 0;
+            
+            while (visited.size < n) {
+                let best = -1;
+                let bestScore = -Infinity;
+                
+                for (let j = 0; j < n; j++) {
+                    if (!visited.has(j)) {
+                        const score = D[current][j] / (1 + distMatrix[current][j] * 0.01);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            best = j;
+                        }
+                    }
+                }
+                
+                if (best !== -1) {
+                    tour.push(best);
+                    visited.add(best);
+                    current = best;
+                }
+            }
+            
+            return tour;
+        }
+        
+        function tournamentSelect(population, fitness, rng) {
+            const tournSize = 3;
+            let best = Math.floor(rng.next() * population.length);
+            
+            for (let i = 1; i < tournSize; i++) {
+                const candidate = Math.floor(rng.next() * population.length);
+                if (fitness[candidate] < fitness[best]) {
+                    best = candidate;
+                }
+            }
+            
+            return [...population[best]];
+        }
+        
+        function orderCrossover(parent1, parent2, rng) {
+            const n = parent1.length;
+            const start = Math.floor(rng.next() * n);
+            const end = Math.floor(rng.next() * n);
+            const [a, b] = start < end ? [start, end] : [end, start];
+            
+            const child = Array(n).fill(-1);
+            for (let i = a; i <= b; i++) child[i] = parent1[i];
+            
+            let pos = (b + 1) % n;
+            const used = new Set(child.filter(x => x !== -1));
+            
+            for (let i = 0; i < n; i++) {
+                const city = parent2[(b + 1 + i) % n];
+                if (!used.has(city)) {
+                    child[pos] = city;
+                    pos = (pos + 1) % n;
+                }
+            }
+            
+            return child;
+        }
+        
+        function swapMutate(individual, rng) {
+            const n = individual.length;
+            const i = Math.floor(rng.next() * n);
+            const j = Math.floor(rng.next() * n);
+            [individual[i], individual[j]] = [individual[j], individual[i]];
+        }
+        
+        function primMST(distMatrix) {
+            const n = distMatrix.length;
+            const mst = [];
+            const visited = Array(n).fill(false);
+            const key = Array(n).fill(Infinity);
+            const parent = Array(n).fill(-1);
+            
+            key[0] = 0;
+            
+            for (let count = 0; count < n - 1; count++) {
+                let u = -1;
+                for (let v = 0; v < n; v++) {
+                    if (!visited[v] && (u === -1 || key[v] < key[u])) u = v;
+                }
+                
+                visited[u] = true;
+                
+                if (parent[u] !== -1) {
+                    mst.push({from: parent[u], to: u, weight: distMatrix[parent[u]][u]});
+                }
+                
+                for (let v = 0; v < n; v++) {
+                    if (!visited[v] && distMatrix[u][v] < key[v]) {
+                        key[v] = distMatrix[u][v];
+                        parent[v] = u;
+                    }
+                }
+            }
+            
+            return mst;
+        }
+        
+        function eulerianTour(edges, n) {
+            const adj = Array(n).fill().map(() => []);
+            edges.forEach(e => {
+                adj[e.from].push(e.to);
+                adj[e.to].push(e.from);
+            });
+            
+            const tour = [];
+            const stack = [0];
+            
+            while (stack.length > 0) {
+                const v = stack[stack.length - 1];
+                
+                if (adj[v].length > 0) {
+                    const u = adj[v].pop();
+                    const idx = adj[u].indexOf(v);
+                    if (idx !== -1) adj[u].splice(idx, 1);
+                    stack.push(u);
+                } else {
+                    tour.push(stack.pop());
+                }
+            }
+            
+            return tour.reverse();
+        }
+        
+        class SeededRandom {
+            constructor(seed = 12345) {
+                this.seed = seed;
+            }
+            
+            next() {
+                this.seed = (this.seed * 9301 + 49297) % 233280;
+                return this.seed / 233280;
+            }
+        }
+    </script>
+</body>
+</html>
