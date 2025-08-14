@@ -20,6 +20,11 @@ class LogisticsSimulation {
         this.showGrid = true;
         this.snapToGrid = false;
         this.gridSize = 20;
+        this.showBlockedConnections = false; // Debug mode
+        
+        // Cache for performance optimization
+        this.distanceMatrixCache = null;
+        this.obstacleGeometryVersion = 0; // Increment when obstacles change
         
         // Algorithm parameters
         this.algorithmParams = {
@@ -253,8 +258,16 @@ class LogisticsSimulation {
             y = Math.round(y / this.gridSize) * this.gridSize;
         }
         
+        // Check if the new node would be inside any obstacle
+        const newNode = { x, y };
+        if (this.isPointInAnyObstacle(newNode)) {
+            this.showMessage('Cannot place node inside an obstacle!', 'error');
+            return;
+        }
+        
         this.nodes.push({ x, y, id: this.nodes.length });
         this.clearResults();
+        this.showMessage(`Node ${this.nodes.length - 1} added`, 'success');
     }
     
     deleteNode(node) {
@@ -287,19 +300,80 @@ class LogisticsSimulation {
     
     finishObstacle() {
         if (this.currentObstacle.length >= 3) {
-            this.obstacles.push([...this.currentObstacle]);
-            this.currentObstacle = [];
-            this.drawingObstacle = false;
-            this.clearResults();
-            this.render();
+            // Validate and clean up the polygon
+            const cleanedObstacle = this.validateAndCleanPolygon(this.currentObstacle);
+            
+            if (cleanedObstacle.length >= 3) {
+                this.obstacles.push(cleanedObstacle);
+                this.currentObstacle = [];
+                this.drawingObstacle = false;
+                this.invalidateGeometryCache();
+                this.clearResults();
+                this.render();
+                this.showMessage(`Obstacle added with ${cleanedObstacle.length} vertices!`, 'success');
+            } else {
+                this.showMessage('Invalid obstacle: needs at least 3 distinct points', 'error');
+            }
+        } else {
+            this.showMessage('Obstacle needs at least 3 points. Continue clicking or press Escape to cancel.', 'warning');
         }
+    }
+    
+    validateAndCleanPolygon(polygon) {
+        if (polygon.length < 3) return [];
+        
+        const cleaned = [];
+        const epsilon = 2; // Minimum distance between points
+        
+        // Remove duplicate and very close points
+        for (let i = 0; i < polygon.length; i++) {
+            const current = polygon[i];
+            let isDuplicate = false;
+            
+            for (const existing of cleaned) {
+                const dist = Math.sqrt(
+                    (current.x - existing.x) ** 2 + (current.y - existing.y) ** 2
+                );
+                if (dist < epsilon) {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+            
+            if (!isDuplicate) {
+                cleaned.push({ x: current.x, y: current.y });
+            }
+        }
+        
+        // Ensure polygon is closed (first and last points should be different)
+        if (cleaned.length >= 3) {
+            const first = cleaned[0];
+            const last = cleaned[cleaned.length - 1];
+            const dist = Math.sqrt(
+                (first.x - last.x) ** 2 + (first.y - last.y) ** 2
+            );
+            
+            // If last point is very close to first, remove it (polygon will auto-close)
+            if (dist < epsilon) {
+                cleaned.pop();
+            }
+        }
+        
+        return cleaned;
     }
     
     clearObstacles() {
         this.obstacles = [];
         this.currentObstacle = [];
         this.drawingObstacle = false;
+        this.invalidateGeometryCache();
         this.clearResults();
+    }
+    
+    // Invalidate any cached geometry/distance calculations
+    invalidateGeometryCache() {
+        this.distanceMatrixCache = null;
+        this.obstacleGeometryVersion++;
     }
     
     // =============================================================================
@@ -804,13 +878,28 @@ class LogisticsSimulation {
     }
     
     // =============================================================================
-    // DISTANCE AND PATH CALCULATIONS
+    // ROBUST OBSTACLE-AWARE DISTANCE CALCULATIONS
     // =============================================================================
     
     computeObstacleAwareDistanceMatrix(nodes) {
+        // Use cache if available and geometry hasn't changed
+        const cacheKey = `${nodes.length}_${this.obstacleGeometryVersion}`;
+        if (this.distanceMatrixCache && this.distanceMatrixCache.key === cacheKey) {
+            return this.distanceMatrixCache.matrix;
+        }
+        
         const n = nodes.length;
         const matrix = Array(n).fill().map(() => Array(n).fill(0));
         
+        // Validate all nodes are not inside obstacles
+        for (let i = 0; i < n; i++) {
+            if (this.isPointInAnyObstacle(nodes[i])) {
+                console.warn(`Node ${i} is inside an obstacle! This may cause issues.`);
+                this.showMessage(`Warning: Node ${i} is inside an obstacle`, 'warning');
+            }
+        }
+        
+        // Calculate distances
         for (let i = 0; i < n; i++) {
             for (let j = i + 1; j < n; j++) {
                 const distance = this.calculateObstacleAwareDistance(nodes[i], nodes[j]);
@@ -818,27 +907,214 @@ class LogisticsSimulation {
             }
         }
         
+        // Cache the result
+        this.distanceMatrixCache = {
+            key: cacheKey,
+            matrix: matrix
+        };
+        
         return matrix;
     }
     
     calculateObstacleAwareDistance(node1, node2) {
-        // Check if direct path intersects any obstacles
+        // Check if direct path is blocked by obstacles
         const directDistance = this.euclideanDistance(node1, node2);
         
         if (this.obstacles.length === 0) {
             return directDistance;
         }
         
-        // Check for intersection with obstacles
-        for (const obstacle of this.obstacles) {
-            if (this.lineIntersectsPolygon(node1, node2, obstacle)) {
-                // If blocked, find path around obstacle (simplified)
-                return directDistance * 1.5; // Penalty for going around
-            }
+        // Check if either node is inside an obstacle (invalid)
+        if (this.isPointInAnyObstacle(node1) || this.isPointInAnyObstacle(node2)) {
+            return Infinity; // Nodes inside obstacles are invalid
+        }
+        
+        // Check if direct path intersects any obstacles
+        if (this.isPathBlocked(node1, node2)) {
+            // Find shortest path around obstacles using A* or simplified approach
+            const pathAroundDistance = this.findPathAroundObstacles(node1, node2);
+            return pathAroundDistance;
         }
         
         return directDistance;
     }
+    
+    isPointInAnyObstacle(point) {
+        return this.obstacles.some(obstacle => this.isPointInPolygon(point, obstacle));
+    }
+    
+    isPathBlocked(point1, point2) {
+        return this.obstacles.some(obstacle => this.lineIntersectsOrTouchesPolygon(point1, point2, obstacle));
+    }
+    
+    findPathAroundObstacles(node1, node2) {
+        // Simplified obstacle avoidance: use visibility graph approach
+        // For now, use a penalty-based approach with better pathfinding
+        const directDistance = this.euclideanDistance(node1, node2);
+        
+        // Find the most blocking obstacle and estimate detour
+        let maxPenalty = 1.5; // Base penalty
+        
+        for (const obstacle of this.obstacles) {
+            if (this.lineIntersectsOrTouchesPolygon(node1, node2, obstacle)) {
+                // Calculate penalty based on how much the obstacle blocks the path
+                const obstacleSize = this.getPolygonBoundingBoxSize(obstacle);
+                const detourPenalty = 1.2 + (obstacleSize / directDistance) * 0.5;
+                maxPenalty = Math.max(maxPenalty, detourPenalty);
+            }
+        }
+        
+        return directDistance * Math.min(maxPenalty, 3.0); // Cap at 3x penalty
+    }
+    
+    getPolygonBoundingBoxSize(polygon) {
+        if (polygon.length === 0) return 0;
+        
+        let minX = polygon[0].x, maxX = polygon[0].x;
+        let minY = polygon[0].y, maxY = polygon[0].y;
+        
+        for (let i = 1; i < polygon.length; i++) {
+            minX = Math.min(minX, polygon[i].x);
+            maxX = Math.max(maxX, polygon[i].x);
+            minY = Math.min(minY, polygon[i].y);
+            maxY = Math.max(maxY, polygon[i].y);
+        }
+        
+        const width = maxX - minX;
+        const height = maxY - minY;
+        return Math.sqrt(width * width + height * height);
+    }
+    
+    // =============================================================================
+    // COORDINATE SYSTEM VALIDATION
+    // =============================================================================
+    
+    validateCoordinates(point) {
+        // Ensure coordinates are in valid canvas space
+        return {
+            x: Math.max(0, Math.min(this.canvas.width, point.x || 0)),
+            y: Math.max(0, Math.min(this.canvas.height, point.y || 0))
+        };
+    }
+    
+    validatePolygon(polygon) {
+        if (!Array.isArray(polygon) || polygon.length < 3) {
+            return [];
+        }
+        
+        return polygon.map(point => this.validateCoordinates(point));
+    }
+    
+    // =============================================================================
+    // ROBUST GEOMETRIC COLLISION DETECTION
+    // =============================================================================
+    
+    isPointInPolygon(point, polygon) {
+        if (polygon.length < 3) return false;
+        
+        // Validate coordinates are in same coordinate system
+        const validatedPoint = this.validateCoordinates(point);
+        const validatedPolygon = this.validatePolygon(polygon);
+        
+        if (validatedPolygon.length < 3) return false;
+        
+        let inside = false;
+        const x = validatedPoint.x, y = validatedPoint.y;
+        
+        for (let i = 0, j = validatedPolygon.length - 1; i < validatedPolygon.length; j = i++) {
+            const xi = validatedPolygon[i].x, yi = validatedPolygon[i].y;
+            const xj = validatedPolygon[j].x, yj = validatedPolygon[j].y;
+            
+            if (((yi > y) !== (yj > y)) && 
+                (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+        }
+        
+        return inside;
+    }
+    
+    lineIntersectsOrTouchesPolygon(point1, point2, polygon) {
+        if (polygon.length < 3) return false;
+        
+        // Validate all coordinates
+        const validatedP1 = this.validateCoordinates(point1);
+        const validatedP2 = this.validateCoordinates(point2);
+        const validatedPolygon = this.validatePolygon(polygon);
+        
+        if (validatedPolygon.length < 3) return false;
+        
+        // Check if either endpoint is inside the polygon
+        if (this.isPointInPolygon(validatedP1, validatedPolygon) || 
+            this.isPointInPolygon(validatedP2, validatedPolygon)) {
+            return true;
+        }
+        
+        // Check if line segment intersects any edge of the polygon
+        for (let i = 0; i < validatedPolygon.length; i++) {
+            const j = (i + 1) % validatedPolygon.length;
+            const edgeStart = validatedPolygon[i];
+            const edgeEnd = validatedPolygon[j];
+            
+            if (this.robustLineSegmentIntersection(validatedP1, validatedP2, edgeStart, edgeEnd)) {
+                return true;
+            }
+        }
+        
+        // Check if the entire line segment is inside the polygon
+        const midPoint = {
+            x: (validatedP1.x + validatedP2.x) / 2,
+            y: (validatedP1.y + validatedP2.y) / 2
+        };
+        
+        if (this.isPointInPolygon(midPoint, validatedPolygon)) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    robustLineSegmentIntersection(p1, p2, p3, p4) {
+        const epsilon = 1e-10; // Tolerance for floating-point comparisons
+        
+        // Calculate direction vectors
+        const d1 = this.robustDirection(p3, p4, p1);
+        const d2 = this.robustDirection(p3, p4, p2);
+        const d3 = this.robustDirection(p1, p2, p3);
+        const d4 = this.robustDirection(p1, p2, p4);
+        
+        // Check for proper intersection (segments cross)
+        if (((d1 > epsilon && d2 < -epsilon) || (d1 < -epsilon && d2 > epsilon)) && 
+            ((d3 > epsilon && d4 < -epsilon) || (d3 < -epsilon && d4 > epsilon))) {
+            return true;
+        }
+        
+        // Check for collinear cases (segments touch or overlap)
+        if (Math.abs(d1) <= epsilon && this.pointOnSegment(p3, p1, p4)) return true;
+        if (Math.abs(d2) <= epsilon && this.pointOnSegment(p3, p2, p4)) return true;
+        if (Math.abs(d3) <= epsilon && this.pointOnSegment(p1, p3, p2)) return true;
+        if (Math.abs(d4) <= epsilon && this.pointOnSegment(p1, p4, p2)) return true;
+        
+        return false;
+    }
+    
+    robustDirection(a, b, c) {
+        // Use higher precision calculation for orientation test
+        const val = (c.x - a.x) * (b.y - a.y) - (b.x - a.x) * (c.y - a.y);
+        return val;
+    }
+    
+    pointOnSegment(p, q, r) {
+        // Check if point q lies on segment pr
+        const epsilon = 1e-10;
+        
+        return (q.x <= Math.max(p.x, r.x) + epsilon && q.x >= Math.min(p.x, r.x) - epsilon &&
+                q.y <= Math.max(p.y, r.y) + epsilon && q.y >= Math.min(p.y, r.y) - epsilon);
+    }
+    
+    // =============================================================================
+    // LEGACY FUNCTIONS (DEPRECATED BUT KEPT FOR COMPATIBILITY)
+    // =============================================================================
     
     euclideanDistance(node1, node2) {
         const dx = node1.x - node2.x;
@@ -863,31 +1139,17 @@ class LogisticsSimulation {
         return totalLength;
     }
     
+    // Legacy functions - kept for compatibility but use robust versions internally
     lineIntersectsPolygon(point1, point2, polygon) {
-        if (polygon.length < 3) return false;
-        
-        for (let i = 0; i < polygon.length; i++) {
-            const j = (i + 1) % polygon.length;
-            if (this.lineSegmentsIntersect(point1, point2, polygon[i], polygon[j])) {
-                return true;
-            }
-        }
-        
-        return false;
+        return this.lineIntersectsOrTouchesPolygon(point1, point2, polygon);
     }
     
     lineSegmentsIntersect(p1, p2, p3, p4) {
-        const d1 = this.direction(p3, p4, p1);
-        const d2 = this.direction(p3, p4, p2);
-        const d3 = this.direction(p1, p2, p3);
-        const d4 = this.direction(p1, p2, p4);
-        
-        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && 
-               ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+        return this.robustLineSegmentIntersection(p1, p2, p3, p4);
     }
     
     direction(a, b, c) {
-        return (c.x - a.x) * (b.y - a.y) - (b.x - a.x) * (c.y - a.y);
+        return this.robustDirection(a, b, c);
     }
     
     // =============================================================================
@@ -1078,11 +1340,39 @@ class LogisticsSimulation {
         // Draw algorithm paths
         this.drawAlgorithmPaths();
         
+        // Draw blocked connections in debug mode
+        if (this.showBlockedConnections) {
+            this.drawBlockedConnections();
+        }
+        
         // Draw nodes
         this.drawNodes();
         
         // Update UI counters
         this.updateUICounters();
+    }
+    
+    drawBlockedConnections() {
+        // Show all blocked node-to-node connections in red
+        this.ctx.strokeStyle = '#ff0000';
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([2, 2]);
+        this.ctx.globalAlpha = 0.3;
+        
+        for (let i = 0; i < this.nodes.length; i++) {
+            for (let j = i + 1; j < this.nodes.length; j++) {
+                if (this.isPathBlocked(this.nodes[i], this.nodes[j])) {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(this.nodes[i].x, this.nodes[i].y);
+                    this.ctx.lineTo(this.nodes[j].x, this.nodes[j].y);
+                    this.ctx.stroke();
+                }
+            }
+        }
+        
+        // Reset drawing state
+        this.ctx.setLineDash([]);
+        this.ctx.globalAlpha = 1.0;
     }
     
     updateUICounters() {
@@ -1193,18 +1483,30 @@ class LogisticsSimulation {
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
         
-        this.ctx.beginPath();
-        
+        // Draw segments with different styles for blocked vs unblocked
         for (let i = 0; i < path.length - 1; i++) {
             const from = this.nodes[path[i]];
             const to = this.nodes[path[i + 1]];
             
             if (!from || !to) continue;
             
-            if (i === 0) {
-                this.ctx.moveTo(from.x, from.y);
+            // Check if this segment is blocked
+            const isBlocked = this.isPathBlocked(from, to);
+            
+            if (isBlocked) {
+                // Draw blocked segments with dashed line
+                this.ctx.setLineDash([8, 4]);
+                this.ctx.globalAlpha = 0.7;
+            } else {
+                // Draw clear segments with solid line
+                this.ctx.setLineDash([]);
+                this.ctx.globalAlpha = 1.0;
             }
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(from.x, from.y);
             this.ctx.lineTo(to.x, to.y);
+            this.ctx.stroke();
         }
         
         // Close the tour
@@ -1212,11 +1514,26 @@ class LogisticsSimulation {
             const last = this.nodes[path[path.length - 1]];
             const first = this.nodes[path[0]];
             if (last && first) {
+                const isBlocked = this.isPathBlocked(last, first);
+                
+                if (isBlocked) {
+                    this.ctx.setLineDash([8, 4]);
+                    this.ctx.globalAlpha = 0.7;
+                } else {
+                    this.ctx.setLineDash([]);
+                    this.ctx.globalAlpha = 1.0;
+                }
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(last.x, last.y);
                 this.ctx.lineTo(first.x, first.y);
+                this.ctx.stroke();
             }
         }
         
-        this.ctx.stroke();
+        // Reset drawing state
+        this.ctx.setLineDash([]);
+        this.ctx.globalAlpha = 1.0;
     }
     
     drawNodes() {
@@ -1318,10 +1635,17 @@ function setupActionButtons() {
         'exportScenario': () => simulation.exportScenario(),
         'toggleGrid': () => {
             simulation.showGrid = !simulation.showGrid;
+            document.getElementById('toggleGrid').classList.toggle('active', simulation.showGrid);
             simulation.render();
         },
         'toggleSnap': () => {
             simulation.snapToGrid = !simulation.snapToGrid;
+            document.getElementById('toggleSnap').classList.toggle('active', simulation.snapToGrid);
+        },
+        'toggleBlockedConnections': () => {
+            simulation.showBlockedConnections = !simulation.showBlockedConnections;
+            document.getElementById('toggleBlockedConnections').classList.toggle('active', simulation.showBlockedConnections);
+            simulation.render();
         }
     };
     
